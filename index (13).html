@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TKB 文件預審系統</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&family=Noto+Sans+TC:wght@300;400;500;700&display=swap" rel="stylesheet">
+<style>
+  /* ── Reset & Base ── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:        #0c0f14;
+    --surface:   #131720;
+    --surface2:  #1a2030;
+    --border:    rgba(255,255,255,0.07);
+    --border2:   rgba(255,255,255,0.12);
+    --text:      #e2e8f0;
+    --muted:     #4a5568;
+    --accent:    #5b6ef5;
+    --accent2:   #7c8ff7;
+    --green:     #10b981;
+    --green-dim: rgba(16,185,129,0.15);
+    --yellow:    #f59e0b;
+    --yellow-dim:rgba(245,158,11,0.12);
+    --red:       #ef4444;
+    --red-dim:   rgba(239,68,68,0.1);
+    --mono:      'DM Mono', monospace;
+    --sans:      'Noto Sans TC', sans-serif;
+  }
+
+  html { font-size: 14px; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+    line-height: 1.6;
+  }
+
+  /* ── Layout ── */
+  .app { display: flex; flex-direction: column; min-height: 100vh; }
+
+  header {
+    border-bottom: 1px solid var(--border);
+    padding: 16px 28px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--surface);
+    position: sticky; top: 0; z-index: 100;
+  }
+
+  .logo {
+    display: flex; align-items: center; gap: 12px;
+  }
+  .logo-mark {
+    width: 32px; height: 32px;
+    background: var(--accent);
+    border-radius: 8px;
+    display: grid; place-items: center;
+    font-family: var(--mono); font-size: 13px; font-weight: 500;
+    color: #fff; letter-spacing: -0.5px;
+  }
+  .logo-text { font-size: 13px; font-weight: 500; color: var(--text); letter-spacing: 0.3px; }
+  .logo-sub  { font-size: 11px; color: var(--muted); font-family: var(--mono); }
+
+  .header-right { display: flex; align-items: center; gap: 10px; }
+
+  .badge {
+    font-family: var(--mono); font-size: 10px; letter-spacing: 1.5px;
+    color: var(--muted); text-transform: uppercase;
+    border: 1px solid var(--border); border-radius: 4px;
+    padding: 3px 8px;
+  }
+
+  main { flex: 1; padding: 28px; max-width: 1000px; margin: 0 auto; width: 100%; }
+
+  /* ── Config Panel ── */
+  .config-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 24px;
+  }
+
+  .config-title {
+    font-size: 11px; font-family: var(--mono); letter-spacing: 1.5px;
+    color: var(--muted); text-transform: uppercase; margin-bottom: 14px;
+  }
+
+  .config-grid { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; }
+
+  .field { display: flex; flex-direction: column; gap: 5px; }
+  .field-label { font-size: 11px; color: var(--muted); font-family: var(--mono); }
+  .field input {
+    background: var(--surface2);
+    border: 1px solid var(--border2);
+    border-radius: 7px;
+    padding: 9px 13px;
+    color: var(--text);
+    font-family: var(--mono); font-size: 12px;
+    outline: none; transition: border 0.15s;
+  }
+  .field input:focus { border-color: var(--accent); }
+  .field.grow { flex: 1 1 280px; }
+  .field.sm   { flex: 0 0 120px; }
+
+  /* ── Buttons ── */
+  .btn {
+    border: none; border-radius: 8px; padding: 9px 20px;
+    font-family: var(--sans); font-size: 13px; font-weight: 500;
+    cursor: pointer; transition: all 0.15s; white-space: nowrap;
+  }
+  .btn-primary {
+    background: var(--accent); color: #fff;
+  }
+  .btn-primary:hover { background: var(--accent2); }
+  .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .btn-ghost {
+    background: rgba(255,255,255,0.05);
+    border: 1px solid var(--border2);
+    color: var(--muted);
+  }
+  .btn-ghost:hover { color: var(--text); border-color: rgba(255,255,255,0.2); }
+
+  .btn-green {
+    background: var(--green-dim);
+    border: 1px solid rgba(16,185,129,0.3);
+    color: #6ee7b7;
+  }
+  .btn-green:hover { background: rgba(16,185,129,0.25); }
+  .btn-green:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .btn-danger {
+    background: rgba(239,68,68,0.12);
+    border: 1px solid rgba(239,68,68,0.3);
+    color: #fca5a5;
+  }
+
+  /* ── Stats Bar ── */
+  .stats-bar {
+    display: flex; gap: 10px; flex-wrap: wrap;
+    align-items: center; margin-bottom: 18px;
+  }
+
+  .stat {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px; padding: 8px 16px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .stat-num { font-size: 22px; font-weight: 700; font-family: var(--mono); line-height: 1; }
+  .stat-label { font-size: 11px; color: var(--muted); }
+
+  /* ── Tabs ── */
+  .tabs { display: flex; gap: 4px; margin-bottom: 14px; }
+  .tab {
+    background: transparent; border: 1px solid transparent;
+    border-radius: 7px; padding: 6px 14px;
+    font-family: var(--mono); font-size: 11px; letter-spacing: 0.5px;
+    color: var(--muted); cursor: pointer; transition: all 0.12s;
+  }
+  .tab.active {
+    background: rgba(91,110,245,0.15);
+    border-color: rgba(91,110,245,0.35);
+    color: var(--accent2);
+  }
+  .tab:hover:not(.active) { color: var(--text); }
+
+  /* ── File Cards ── */
+  .file-list { display: flex; flex-direction: column; gap: 8px; }
+
+  .file-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px; padding: 13px 16px;
+    transition: all 0.15s;
+  }
+  .file-card.confirmed {
+    background: rgba(16,185,129,0.06);
+    border-color: rgba(16,185,129,0.2);
+  }
+  .file-card.skipped { opacity: 0.4; }
+
+  .card-row1 {
+    display: flex; align-items: center; gap: 8px;
+    margin-bottom: 10px; flex-wrap: wrap;
+  }
+
+  .file-icon { font-size: 16px; flex-shrink: 0; }
+
+  .file-name {
+    flex: 1; font-size: 13px; font-weight: 500;
+    color: var(--text); overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap; min-width: 0;
+  }
+
+  .conf-badge {
+    font-family: var(--mono); font-size: 10px; font-weight: 600;
+    padding: 2px 9px; border-radius: 20px; flex-shrink: 0;
+    letter-spacing: 0.3px;
+  }
+  .conf-high   { background: var(--green-dim); border: 1px solid rgba(16,185,129,0.3); color: #6ee7b7; }
+  .conf-medium { background: var(--yellow-dim); border: 1px solid rgba(245,158,11,0.3); color: #fcd34d; }
+  .conf-low    { background: var(--red-dim); border: 1px solid rgba(239,68,68,0.25); color: #fca5a5; }
+  .conf-skip   { background: rgba(255,255,255,0.05); border: 1px solid var(--border); color: var(--muted); }
+
+  .new-folder-badge {
+    font-family: var(--mono); font-size: 10px; font-weight: 600;
+    padding: 2px 9px; border-radius: 20px; flex-shrink: 0;
+    background: var(--yellow-dim); border: 1px solid rgba(245,158,11,0.3); color: #fcd34d;
+  }
+
+  .card-row2 {
+    display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap;
+  }
+
+  .field-inline { flex: 2 1 160px; }
+  .field-inline label {
+    display: block; font-size: 10px; color: var(--muted);
+    font-family: var(--mono); margin-bottom: 3px;
+  }
+  .field-inline input {
+    width: 100%; background: var(--surface2);
+    border: 1px solid var(--border2); border-radius: 6px;
+    padding: 7px 10px; color: var(--text);
+    font-family: var(--mono); font-size: 11px;
+    outline: none; transition: border 0.12s;
+  }
+  .field-inline input:focus { border-color: var(--accent); }
+  .field-inline input.name-input { color: var(--accent2); }
+
+  .card-actions { display: flex; gap: 6px; flex-shrink: 0; align-items: flex-end; }
+
+  .btn-confirm {
+    padding: 7px 14px; border-radius: 6px; font-size: 12px;
+    font-weight: 700; cursor: pointer; border: none; transition: all 0.12s;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid var(--border2); color: var(--muted);
+  }
+  .btn-confirm.confirmed {
+    background: var(--green-dim);
+    border-color: rgba(16,185,129,0.35); color: #6ee7b7;
+  }
+  .btn-confirm:disabled { cursor: not-allowed; }
+
+  .btn-skip {
+    padding: 7px 10px; border-radius: 6px; font-size: 13px;
+    cursor: pointer; background: rgba(255,255,255,0.03);
+    border: 1px solid var(--border); color: var(--muted);
+    transition: all 0.12s;
+  }
+
+  .card-reason {
+    margin-top: 7px; font-size: 11px; color: var(--muted);
+    font-family: var(--mono);
+  }
+
+  /* ── New Folders Alert ── */
+  .new-folders-alert {
+    background: var(--yellow-dim);
+    border: 1px solid rgba(245,158,11,0.25);
+    border-radius: 12px; padding: 14px 18px;
+    margin-bottom: 18px;
+  }
+  .new-folders-title {
+    font-size: 12px; font-weight: 700; color: #fcd34d;
+    margin-bottom: 8px; font-family: var(--mono);
+  }
+  .new-folder-item {
+    font-family: var(--mono); font-size: 11px;
+    color: #d97706; background: rgba(245,158,11,0.1);
+    border-radius: 5px; padding: 3px 10px; margin-bottom: 4px;
+  }
+
+  /* ── Empty / Loading ── */
+  .empty {
+    text-align: center; padding: 60px 20px;
+    color: var(--muted); font-family: var(--mono); font-size: 12px;
+  }
+  .empty-icon { font-size: 36px; margin-bottom: 12px; }
+
+  .loading-spinner {
+    display: inline-block; width: 14px; height: 14px;
+    border: 2px solid rgba(255,255,255,0.2);
+    border-top-color: #fff; border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Toast ── */
+  .toast {
+    position: fixed; bottom: 24px; right: 24px;
+    background: var(--surface2); border: 1px solid var(--border2);
+    border-radius: 10px; padding: 12px 18px;
+    font-size: 13px; color: var(--text);
+    transform: translateY(80px); opacity: 0;
+    transition: all 0.3s; z-index: 999;
+    max-width: 320px;
+  }
+  .toast.show { transform: translateY(0); opacity: 1; }
+  .toast.success { border-color: rgba(16,185,129,0.4); color: #6ee7b7; }
+  .toast.error   { border-color: rgba(239,68,68,0.4); color: #fca5a5; }
+
+  /* ── Execute Panel ── */
+  .execute-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px; padding: 18px 20px;
+    margin-top: 20px;
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  }
+  .execute-info { flex: 1; font-size: 12px; color: var(--muted); font-family: var(--mono); }
+  .execute-info strong { color: var(--text); }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- Header -->
+  <header>
+    <div class="logo">
+      <div class="logo-mark">T6</div>
+      <div>
+        <div class="logo-text">TKB 放洋 · 文件預審系統</div>
+        <div class="logo-sub">Module 6 — Vendor Doc Review</div>
+      </div>
+    </div>
+    <div class="header-right">
+      <span class="badge">v1.3</span>
+    </div>
+  </header>
+
+  <main>
+
+    <!-- Config Panel -->
+    <div class="config-panel">
+      <div class="config-title">系統設定</div>
+      <div class="config-grid">
+        <div class="field grow">
+          <span class="field-label">GAS WebApp URL</span>
+          <input type="text" id="gasUrl" placeholder="https://script.google.com/macros/s/xxx/exec" />
+        </div>
+        <div class="field sm">
+          <span class="field-label">廠商代號</span>
+          <input type="text" id="vendorCode" placeholder="EP" />
+        </div>
+        <div class="field sm">
+          <span class="field-label">廠商ID</span>
+          <input type="text" id="vendorId" placeholder="V20260508001" />
+        </div>
+        <div class="field" style="flex: 0 0 auto; align-self: flex-end;">
+          <button class="btn btn-primary" onclick="loadPending()">
+            <span id="loadBtnText">載入清單</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Content Area -->
+    <div id="content">
+      <div class="empty">
+        <div class="empty-icon">📂</div>
+        <div>填入設定後點「載入清單」</div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────
+let items    = [];
+let activeTab = "all";
+
+// ── API ────────────────────────────────────────────────────────────
+async function callGAS(action, body = {}) {
+  const url = document.getElementById("gasUrl").value.trim();
+  if (!url) { showToast("請填入 GAS WebApp URL", "error"); throw new Error("no url"); }
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "text/plain" },
+    body: JSON.stringify({ action, ...body }),
+  });
+  return res.json();
+}
+
+// ── Load Pending ────────────────────────────────────────────────────
+async function loadPending() {
+  const btn  = document.getElementById("loadBtnText");
+  const vid  = document.getElementById("vendorId").value.trim() || null;
+  btn.innerHTML = '<span class="loading-spinner"></span>';
+
+  try {
+    const data = await callGAS("getPending", { vendorId: vid });
+    if (!data.success) throw new Error(data.error);
+
+    items = data.items.map(item => ({
+      ...item,
+      overrideDest: item.suggestedDest || "",
+      overrideName: item.suggestedName || item.originalName,
+      confirmed: false,
+      skip: false,
+    }));
+
+    renderAll();
+    showToast(`✓ 載入完成，共 ${items.length} 筆`, "success");
+  } catch (e) {
+    showToast("載入失敗：" + e.message, "error");
+  } finally {
+    btn.textContent = "載入清單";
+  }
+}
+
+// ── Render ─────────────────────────────────────────────────────────
+function renderAll() {
+  const content = document.getElementById("content");
+
+  if (!items.length) {
+    content.innerHTML = `<div class="empty"><div class="empty-icon">✅</div><div>沒有待審查的項目</div></div>`;
+    return;
+  }
+
+  const total     = items.length;
+  const confirmed = items.filter(f => f.confirmed && !f.skip).length;
+  const skipped   = items.filter(f => f.skip).length;
+  const pending   = total - confirmed - skipped;
+
+  // 需新建的資料夾
+  const newFolders = [...new Set(
+    items
+      .filter(i => i.isNewFolder && i.overrideDest && !i.overrideDest.includes("略過"))
+      .map(i => i.overrideDest)
+  )];
+
+  // 篩選
+  const displayed =
+    activeTab === "pending"   ? items.filter(f => !f.confirmed && !f.skip) :
+    activeTab === "confirmed" ? items.filter(f => f.confirmed && !f.skip)  :
+    activeTab === "skip"      ? items.filter(f => f.skip)                  :
+    items;
+
+  content.innerHTML = `
+    ${newFolders.length ? `
+    <div class="new-folders-alert">
+      <div class="new-folders-title">📁 需新建 ${newFolders.length} 個資料夾</div>
+      ${newFolders.map(f => `<div class="new-folder-item">+ ${f}/</div>`).join("")}
+    </div>` : ""}
+
+    <div class="stats-bar">
+      ${[
+        { label: "待確認", val: pending,   color: "#f59e0b" },
+        { label: "已確認", val: confirmed, color: "#10b981" },
+        { label: "略過",   val: skipped,   color: "#475569" },
+        { label: "共計",   val: total,     color: "#5b6ef5" },
+      ].map(s => `
+        <div class="stat">
+          <span class="stat-num" style="color:${s.color}">${s.val}</span>
+          <span class="stat-label">${s.label}</span>
+        </div>`).join("")}
+
+      <div style="margin-left:auto; display:flex; gap:8px;">
+        <button class="btn btn-green" onclick="confirmAll()">✓ 全部確認</button>
+        <button class="btn btn-ghost" onclick="loadPending()">↺ 重新載入</button>
+      </div>
+    </div>
+
+    <div class="tabs">
+      ${[["all","全部"],["pending","待確認"],["confirmed","已確認"],["skip","略過"]].map(([k,l]) =>
+        `<button class="tab ${activeTab===k?"active":""}" onclick="setTab('${k}')">${l}</button>`
+      ).join("")}
+    </div>
+
+    <div class="file-list">
+      ${displayed.map(item => renderCard(item)).join("")}
+    </div>
+
+    <div class="execute-panel">
+      <div class="execute-info">
+        已確認 <strong>${confirmed}</strong> 筆，略過 <strong>${skipped}</strong> 筆，待確認 <strong>${pending}</strong> 筆
+      </div>
+      <input type="text" id="vendorFolderUrl" placeholder="廠商根資料夾 Drive URL"
+        style="flex:1 1 280px; background:#1a2030; border:1px solid rgba(255,255,255,0.12); border-radius:7px; padding:9px 13px; color:#e2e8f0; font-family:'DM Mono',monospace; font-size:12px; outline:none;" />
+      <button class="btn btn-primary" onclick="executeAll()" ${confirmed===0?"disabled":""}>
+        🚀 執行歸檔 (${confirmed} 筆)
+      </button>
+    </div>
+  `;
+}
+
+function renderCard(item) {
+  const idx  = items.indexOf(item);
+  const icon = getIcon(item.originalName, item.isFolder);
+  const conf = item.confidence || "low";
+  const confClass = { high:"conf-high", medium:"conf-medium", low:"conf-low", skip:"conf-skip" }[conf] || "conf-low";
+  const confLabel = { high:"高", medium:"中", low:"低", skip:"略過" }[conf] || "?";
+  const isSkip = item.overrideDest && item.overrideDest.includes("略過");
+
+  return `
+  <div class="file-card ${item.confirmed?"confirmed":""} ${item.skip?"skipped":""}" id="card-${idx}">
+    <div class="card-row1">
+      <span class="file-icon">${icon}</span>
+      <span class="file-name" title="${item.originalPath}">${item.originalName}</span>
+      <span class="conf-badge ${confClass}">信心 ${confLabel}</span>
+      ${isSkip ? `<span class="conf-badge conf-skip">略過</span>` : ""}
+    </div>
+    <div class="card-row2">
+      <div class="field-inline">
+        <label>歸入位置</label>
+        <input type="text" value="${item.overrideDest || ""}"
+          onchange="updateItem(${idx},'overrideDest',this.value)"
+          ${item.skip?"disabled":""} placeholder="輸入目標路徑" />
+      </div>
+      <div class="field-inline">
+        <label>建議命名</label>
+        <input type="text" class="name-input" value="${item.overrideName || ""}"
+          onchange="updateItem(${idx},'overrideName',this.value)"
+          ${item.skip?"disabled":""} placeholder="輸入命名" />
+      </div>
+      <div class="card-actions">
+        <button class="btn-confirm ${item.confirmed?"confirmed":""}"
+          onclick="toggleConfirm(${idx})" ${item.skip?"disabled":""}>
+          ${item.confirmed ? "✓ 確認" : "確認"}
+        </button>
+        <button class="btn-skip" onclick="toggleSkip(${idx})"
+          title="${item.skip?"取消略過":"略過"}">
+          ${item.skip ? "↩" : "⏭"}
+        </button>
+      </div>
+    </div>
+    <div class="card-reason">💡 ${item.reason || "—"}</div>
+  </div>`;
+}
+
+// ── Actions ────────────────────────────────────────────────────────
+function setTab(tab) { activeTab = tab; renderAll(); }
+
+function updateItem(idx, field, val) { items[idx][field] = val; }
+
+function toggleConfirm(idx) {
+  items[idx].confirmed = !items[idx].confirmed;
+  renderAll();
+}
+
+function toggleSkip(idx) {
+  items[idx].skip      = !items[idx].skip;
+  items[idx].confirmed = false;
+  renderAll();
+}
+
+function confirmAll() {
+  items.forEach(i => { if (!i.skip) i.confirmed = true; });
+  renderAll();
+}
+
+// ── Save Confirmations to GAS ──────────────────────────────────────
+async function saveConfirmations() {
+  const vid  = document.getElementById("vendorId").value.trim();
+  const confirmations = items
+    .filter(i => !i.skip)
+    .map(i => ({
+      rowIndex:      i.rowIndex,
+      confirmedDest: i.overrideDest,
+      confirmedName: i.overrideName,
+      status:        i.confirmed ? "已確認" : "待確認",
+    }));
+
+  const data = await callGAS("confirm", { confirmations });
+  if (!data.success) throw new Error(data.error);
+  return data;
+}
+
+// ── Execute Filing ─────────────────────────────────────────────────
+async function executeAll() {
+  const vid       = document.getElementById("vendorId").value.trim();
+  const folderUrl = document.getElementById("vendorFolderUrl")?.value?.trim();
+
+  if (!vid)       { showToast("請填入廠商ID", "error"); return; }
+  if (!folderUrl) { showToast("請填入廠商根資料夾 URL", "error"); return; }
+
+  showToast("正在儲存確認結果...");
+  try {
+    await saveConfirmations();
+    showToast("正在執行搬檔，請稍候...");
+
+    const data = await callGAS("execute", { vendorId: vid, vendorFolderUrl: folderUrl });
+    if (!data.success) throw new Error(data.error);
+
+    showToast(`✅ ${data.message}`, "success");
+    setTimeout(() => loadPending(), 2000);
+
+  } catch (e) {
+    showToast("執行失敗：" + e.message, "error");
+  }
+}
+
+// ── Utils ──────────────────────────────────────────────────────────
+function getIcon(name, isFolder) {
+  if (isFolder) return "📁";
+  const ext = (name || "").split(".").pop().toLowerCase();
+  const map = { pdf:"📄", doc:"📝", docx:"📝", xlsx:"📊", xls:"📊", csv:"📊",
+                ppt:"📋", pptx:"📋", jpg:"🖼️", jpeg:"🖼️", png:"🖼️",
+                mp4:"🎬", mov:"🎬", zip:"📦" };
+  return map[ext] || "📄";
+}
+
+function showToast(msg, type = "") {
+  const t = document.getElementById("toast");
+  t.textContent = msg;
+  t.className   = `toast show ${type}`;
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => { t.className = "toast"; }, 3000);
+}
+
+// ── 讀取 localStorage 設定 ──────────────────────────────────────────
+window.addEventListener("DOMContentLoaded", () => {
+  const saved = localStorage.getItem("tkb_config");
+  if (saved) {
+    try {
+      const c = JSON.parse(saved);
+      if (c.gasUrl)     document.getElementById("gasUrl").value     = c.gasUrl;
+      if (c.vendorId)   document.getElementById("vendorId").value   = c.vendorId;
+      if (c.vendorCode) document.getElementById("vendorCode").value = c.vendorCode;
+    } catch {}
+  }
+
+  // 自動存設定
+  ["gasUrl","vendorId","vendorCode"].forEach(id => {
+    document.getElementById(id).addEventListener("change", saveConfig);
+  });
+});
+
+function saveConfig() {
+  localStorage.setItem("tkb_config", JSON.stringify({
+    gasUrl:     document.getElementById("gasUrl").value,
+    vendorId:   document.getElementById("vendorId").value,
+    vendorCode: document.getElementById("vendorCode").value,
+  }));
+}
+</script>
+</body>
+</html>
