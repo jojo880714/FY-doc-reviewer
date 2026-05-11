@@ -528,13 +528,26 @@ function renderAll() {
       <div class="execute-info">
         已確認 <strong>${confirmed}</strong> 筆・略過 <strong>${skipped}</strong> 筆・待確認 <strong>${pending}</strong> 筆
       </div>
+      <input class="execute-url-input" id="execVendorId"
+        placeholder="廠商 ID（如 V20260508001）" style="flex:0 0 180px;" />
       <input class="execute-url-input" id="vendorFolderUrl"
-        placeholder="廠商根資料夾 Drive URL（執行搬檔用）" />
+        placeholder="廠商根資料夾 Drive URL" />
       <button class="btn btn-execute" onclick="executeAll()" ${confirmed === 0 ? "disabled" : ""}>
         🚀 執行歸檔（${confirmed} 筆）
       </button>
     </div>
   `;
+
+  // 自動帶入廠商ID（從上方設定欄）
+  const vidInput = document.getElementById("execVendorId");
+  if (vidInput) {
+    vidInput.value = getVal("vendorId");
+    vidInput.addEventListener("change", () => {
+      // 同步回上方設定欄
+      const top = document.getElementById("vendorId");
+      if (top) top.value = vidInput.value;
+    });
+  }
 
   // 還原 vendorFolderUrl
   const saved = localStorage.getItem("tkb_folder_url");
@@ -632,11 +645,11 @@ async function saveConfirmations() {
 }
 
 async function executeAll() {
-  // 從 input 或 localStorage 取廠商 ID
-  const vid = getVal("vendorId");
+  // 優先讀執行區的廠商ID，fallback 到頂部設定欄
+  const vid = getVal("execVendorId") || getVal("vendorId");
   if (!vid) {
-    showToast("請在上方填入廠商 ID", "error");
-    document.getElementById("vendorId")?.focus();
+    showToast("請填入廠商 ID", "error");
+    document.getElementById("execVendorId")?.focus();
     return;
   }
 
