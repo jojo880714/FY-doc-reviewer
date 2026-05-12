@@ -443,7 +443,7 @@ async function loadPending() {
   btn.innerHTML = '<span class="loading-spinner"></span> 載入中';
 
   try {
-    const data = await callGAS("getPending", { vendorId: vid });
+    const data = await callGAS("doc_getPending", { vendorId: vid });
     if (!data.success) throw new Error(data.error);
 
     items = (data.items || []).map(item => ({
@@ -640,7 +640,7 @@ async function saveConfirmations() {
     status:        i.skip ? "已略過" : i.confirmed ? "已確認" : "待確認",
   }));
 
-  const data = await callGAS("confirm", { confirmations });
+  const data = await callGAS("doc_confirm", { confirmations });
   if (!data.success) throw new Error(data.error);
 }
 
@@ -665,7 +665,7 @@ async function executeAll() {
     await saveConfirmations();
     showToast("⚡ 正在執行搬檔，請稍候...");
 
-    const data = await callGAS("execute", { vendorId: vid, vendorFolderUrl: folderUrl });
+    const data = await callGAS("doc_execute", { vendorId: vid, vendorFolderUrl: folderUrl });
     if (!data.success) throw new Error(data.error);
 
     showToast(`✅ ${data.message}`, "success");
