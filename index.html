@@ -1,700 +1,220 @@
 <!DOCTYPE html>
-<html lang="zh-TW">
+<html lang="zh-Hant">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>TKB 文件預審系統</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&family=Noto+Sans+TC:wght@300;400;500;700&display=swap" rel="stylesheet">
+<title>廠商資料夾預審與歸檔｜TKB 放洋</title>
 <style>
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-  :root {
-    --brand-primary:  #3D5066;
-    --brand-dark:     #2C3D50;
-    --brand-muted:    #8BA4BD;
-    --dark-bg:        #0F1923;
-    --dark-surface:   #1E2D3D;
-    --dark-text:      #F0F4F8;
-    --bg:             #FAFAF8;
-    --bg-card:        #FFFFFF;
-    --bg-muted:       #F4F3F0;
-    --border:         rgba(0,0,0,0.08);
-    --border-strong:  rgba(0,0,0,0.20);
-    --text-primary:   #1A1A1A;
-    --text-secondary: #6B6B6B;
-    --text-muted:     #A0A0A0;
-    --accent-orange:  #FFA534;
-    --green:          #10b981;
-    --green-dim:      rgba(16,185,129,0.12);
-    --yellow:         #f59e0b;
-    --yellow-dim:     rgba(245,158,11,0.10);
-    --red:            #ef4444;
-    --red-dim:        rgba(239,68,68,0.08);
-    --mono:           'DM Mono', monospace;
-    --sans:           'Noto Sans TC', sans-serif;
+  :root{
+    --bg:#f5f6f8; --card:#ffffff; --ink:#1f2430; --muted:#6b7280; --line:#e5e7eb;
+    --primary:#2563eb; --primary-d:#1d4ed8; --ok:#15803d; --warn:#b45309; --bad:#b91c1c;
+    --copy-bg:#e6f4ea; --copy-ink:#15803d; --sc-bg:#e8f0fe; --sc-ink:#1d4ed8; --ex-bg:#fce8e6; --ex-ink:#b91c1c;
+    --radius:12px; --shadow:0 1px 2px rgba(16,24,40,.06),0 1px 3px rgba(16,24,40,.1);
   }
-
-  html { font-size: 16px; }
-
-  body {
-    background: var(--dark-bg);
-    color: var(--dark-text);
-    font-family: var(--sans);
-    min-height: 100vh;
-    line-height: 1.65;
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif;
+    line-height:1.5; font-size:14px;
   }
+  .wrap{max-width:1080px; margin:0 auto; padding:24px 18px 80px}
+  header.top{margin-bottom:18px}
+  header.top h1{font-size:20px; margin:0 0 4px}
+  header.top p{margin:0; color:var(--muted); font-size:13px}
 
-  .app { display: flex; flex-direction: column; min-height: 100vh; }
+  .card{background:var(--card); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow); padding:18px; margin-bottom:16px}
+  .card h2{font-size:15px; margin:0 0 12px; display:flex; align-items:center; gap:8px}
+  .stepnum{display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px; border-radius:50%; background:var(--primary); color:#fff; font-size:12px; font-weight:700; flex:none}
+  .card.done .stepnum{background:var(--ok)}
+  .hint{color:var(--muted); font-size:12.5px; margin:6px 0 12px}
 
-  /* ── Header ── */
-  header {
-    background: var(--brand-dark);
-    border-bottom: 1px solid rgba(255,255,255,0.08);
-    padding: 16px 32px;
-    display: flex; align-items: center; justify-content: space-between;
-    position: sticky; top: 0; z-index: 100;
+  .grid{display:grid; grid-template-columns:repeat(2,1fr); gap:12px}
+  @media(max-width:680px){ .grid{grid-template-columns:1fr} }
+  label.fld{display:block; font-size:12.5px; color:var(--muted); margin-bottom:4px}
+  input[type=text], input[type=url], select{
+    width:100%; padding:8px 10px; border:1px solid var(--line); border-radius:8px; font-size:13px; background:#fff; color:var(--ink);
   }
+  input:focus, select:focus{outline:2px solid #bfdbfe; border-color:var(--primary)}
 
-  .logo { display: flex; align-items: center; gap: 14px; }
-
-  .logo-mark {
-    width: 36px; height: 36px;
-    background: var(--accent-orange);
-    border-radius: 9px;
-    display: grid; place-items: center;
-    font-family: var(--mono); font-size: 13px; font-weight: 500;
-    color: #fff; letter-spacing: -0.5px;
+  .btn{
+    appearance:none; border:1px solid var(--primary); background:var(--primary); color:#fff;
+    padding:8px 14px; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer;
   }
+  .btn:hover{background:var(--primary-d)}
+  .btn:disabled{opacity:.5; cursor:not-allowed}
+  .btn.ghost{background:#fff; color:var(--primary)}
+  .btn.ghost:hover{background:#eff6ff}
+  .btn.gray{background:#fff; color:var(--ink); border-color:var(--line)}
+  .btn.gray:hover{background:#f9fafb}
+  .row{display:flex; flex-wrap:wrap; gap:10px; align-items:center}
+  .chk{display:inline-flex; align-items:center; gap:6px; font-size:12.5px; color:var(--muted)}
 
-  .logo-text { font-size: 15px; font-weight: 600; color: var(--dark-text); }
-  .logo-sub  { font-size: 12px; color: var(--brand-muted); font-family: var(--mono); }
+  .status{margin-top:10px; font-size:13px; min-height:20px}
+  .status .ok{color:var(--ok)} .status .warn{color:var(--warn)} .status .bad{color:var(--bad)}
+  .spin{display:inline-block; width:13px; height:13px; border:2px solid #cbd5e1; border-top-color:var(--primary); border-radius:50%; animation:sp .8s linear infinite; vertical-align:-2px; margin-right:6px}
+  @keyframes sp{to{transform:rotate(360deg)}}
 
-  .badge {
-    font-family: var(--mono); font-size: 11px; letter-spacing: 1.5px;
-    color: var(--brand-muted); border: 1px solid rgba(255,255,255,0.15);
-    border-radius: 5px; padding: 3px 9px;
-  }
+  .pills{display:flex; flex-wrap:wrap; gap:8px; margin-top:10px}
+  .pill{font-size:12px; padding:4px 10px; border-radius:999px; background:#f1f3f4; color:var(--ink)}
+  .pill.copy{background:var(--copy-bg); color:var(--copy-ink)}
+  .pill.sc{background:var(--sc-bg); color:var(--sc-ink)}
+  .pill.ex{background:var(--ex-bg); color:var(--ex-ink)}
 
-  /* ── Main ── */
-  main { flex: 1; padding: 32px; max-width: 1040px; margin: 0 auto; width: 100%; }
+  table{width:100%; border-collapse:collapse; font-size:12.5px; margin-top:8px}
+  th,td{text-align:left; padding:7px 8px; border-bottom:1px solid var(--line); vertical-align:top}
+  th{color:var(--muted); font-weight:600; position:sticky; top:0; background:#fafafa; z-index:1}
+  .tbl-wrap{max-height:460px; overflow:auto; border:1px solid var(--line); border-radius:8px}
+  td input[type=text], td select{padding:5px 7px; font-size:12px}
+  .tag{font-size:11px; padding:2px 7px; border-radius:6px; white-space:nowrap}
+  .tag.copy{background:var(--copy-bg); color:var(--copy-ink)}
+  .tag.sc{background:var(--sc-bg); color:var(--sc-ink)}
+  .tag.ex{background:var(--ex-bg); color:var(--ex-ink)}
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:11.5px; color:var(--muted); word-break:break-all}
+  .src{color:var(--muted); font-size:11px; word-break:break-all}
+  .conf-low{color:var(--bad); font-weight:600}
+  .conf-medium{color:var(--warn)}
+  .conf-high{color:var(--ok)}
 
-  /* ── Config Panel ── */
-  .config-panel {
-    background: var(--dark-surface);
-    border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 14px; padding: 22px 24px;
-    margin-bottom: 28px;
-  }
-
-  .config-title {
-    font-size: 12px; font-family: var(--mono); letter-spacing: 1.5px;
-    color: var(--brand-muted); text-transform: uppercase; margin-bottom: 16px;
-  }
-
-  .config-grid { display: flex; gap: 14px; flex-wrap: wrap; align-items: flex-end; }
-
-  .field { display: flex; flex-direction: column; gap: 6px; }
-  .field-label { font-size: 12px; color: var(--brand-muted); font-family: var(--mono); }
-
-  .field input {
-    background: rgba(255,255,255,0.05);
-    border: 1px solid rgba(255,255,255,0.12);
-    border-radius: 8px; padding: 10px 14px;
-    color: var(--dark-text);
-    font-family: var(--mono); font-size: 13px;
-    outline: none; transition: border 0.15s;
-  }
-  .field input:focus { border-color: var(--brand-muted); }
-  .field.grow { flex: 1 1 300px; }
-  .field.sm   { flex: 0 0 130px; }
-
-  /* ── Buttons ── */
-  .btn {
-    border: none; border-radius: 9px; padding: 10px 22px;
-    font-family: var(--sans); font-size: 14px; font-weight: 600;
-    cursor: pointer; transition: all 0.15s; white-space: nowrap;
-    display: inline-flex; align-items: center; gap: 6px;
-  }
-
-  .btn-primary {
-    background: var(--brand-primary); color: #fff;
-    border: 1px solid rgba(255,255,255,0.1);
-  }
-  .btn-primary:hover { background: var(--brand-dark); }
-  .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
-
-  .btn-ghost {
-    background: rgba(255,255,255,0.05);
-    border: 1px solid rgba(255,255,255,0.12);
-    color: var(--brand-muted);
-  }
-  .btn-ghost:hover { color: var(--dark-text); border-color: rgba(255,255,255,0.25); }
-
-  .btn-green {
-    background: var(--green-dim);
-    border: 1px solid rgba(16,185,129,0.3);
-    color: #6ee7b7;
-  }
-  .btn-green:hover { background: rgba(16,185,129,0.2); }
-  .btn-green:disabled { opacity: 0.4; cursor: not-allowed; }
-
-  .btn-execute {
-    background: var(--accent-orange); color: #fff;
-    border: none;
-  }
-  .btn-execute:hover { background: #e8922a; }
-  .btn-execute:disabled { opacity: 0.4; cursor: not-allowed; }
-
-  /* ── Stats Bar ── */
-  .stats-bar {
-    display: flex; gap: 10px; flex-wrap: wrap;
-    align-items: center; margin-bottom: 20px;
-  }
-
-  .stat {
-    background: var(--dark-surface);
-    border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 11px; padding: 9px 18px;
-    display: flex; align-items: center; gap: 9px;
-  }
-  .stat-num { font-size: 24px; font-weight: 700; font-family: var(--mono); line-height: 1; }
-  .stat-label { font-size: 12px; color: var(--brand-muted); }
-
-  /* ── Tabs ── */
-  .tabs { display: flex; gap: 5px; margin-bottom: 16px; }
-  .tab {
-    background: transparent; border: 1px solid transparent;
-    border-radius: 8px; padding: 7px 16px;
-    font-family: var(--mono); font-size: 12px; letter-spacing: 0.5px;
-    color: var(--brand-muted); cursor: pointer; transition: all 0.12s;
-  }
-  .tab.active {
-    background: var(--brand-primary);
-    border-color: rgba(255,255,255,0.12);
-    color: var(--dark-text);
-  }
-  .tab:hover:not(.active) { color: var(--dark-text); }
-
-  /* ── File Cards ── */
-  .file-list { display: flex; flex-direction: column; gap: 9px; }
-
-  .file-card {
-    background: var(--dark-surface);
-    border: 1px solid rgba(255,255,255,0.07);
-    border-radius: 12px; padding: 14px 18px;
-    transition: all 0.15s;
-  }
-  .file-card.confirmed {
-    background: rgba(16,185,129,0.07);
-    border-color: rgba(16,185,129,0.22);
-  }
-  .file-card.skipped { opacity: 0.38; }
-
-  .card-row1 {
-    display: flex; align-items: center; gap: 9px;
-    margin-bottom: 11px; flex-wrap: wrap;
-  }
-
-  .file-icon { font-size: 17px; flex-shrink: 0; }
-
-  .file-name {
-    flex: 1; font-size: 14px; font-weight: 500;
-    color: var(--dark-text); overflow: hidden;
-    text-overflow: ellipsis; white-space: nowrap; min-width: 0;
-  }
-
-  .conf-badge {
-    font-family: var(--mono); font-size: 11px; font-weight: 600;
-    padding: 3px 10px; border-radius: 20px; flex-shrink: 0;
-  }
-  .conf-high   { background: var(--green-dim); border: 1px solid rgba(16,185,129,0.3); color: #6ee7b7; }
-  .conf-medium { background: var(--yellow-dim); border: 1px solid rgba(245,158,11,0.3); color: #fcd34d; }
-  .conf-low    { background: var(--red-dim); border: 1px solid rgba(239,68,68,0.25); color: #fca5a5; }
-  .conf-skip   { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: var(--brand-muted); }
-
-  .new-folder-badge {
-    font-family: var(--mono); font-size: 11px; font-weight: 600;
-    padding: 3px 10px; border-radius: 20px; flex-shrink: 0;
-    background: var(--yellow-dim); border: 1px solid rgba(245,158,11,0.3); color: #fcd34d;
-  }
-
-  .card-row2 {
-    display: flex; gap: 9px; align-items: flex-end; flex-wrap: wrap;
-  }
-
-  .field-inline { flex: 2 1 170px; }
-  .field-inline label {
-    display: block; font-size: 11px; color: var(--brand-muted);
-    font-family: var(--mono); margin-bottom: 4px;
-  }
-  .field-inline input {
-    width: 100%; background: rgba(255,255,255,0.05);
-    border: 1px solid rgba(255,255,255,0.1); border-radius: 7px;
-    padding: 8px 11px; color: var(--dark-text);
-    font-family: var(--mono); font-size: 12px;
-    outline: none; transition: border 0.12s;
-  }
-  .field-inline input:focus { border-color: var(--brand-muted); }
-  .field-inline input.name-input { color: var(--accent-orange); }
-
-  .card-actions { display: flex; gap: 7px; flex-shrink: 0; align-items: flex-end; }
-
-  .btn-confirm {
-    padding: 8px 16px; border-radius: 7px; font-size: 13px;
-    font-weight: 700; cursor: pointer; transition: all 0.12s;
-    background: rgba(255,255,255,0.05);
-    border: 1px solid rgba(255,255,255,0.1); color: var(--brand-muted);
-  }
-  .btn-confirm.confirmed {
-    background: var(--green-dim);
-    border-color: rgba(16,185,129,0.35); color: #6ee7b7;
-  }
-  .btn-confirm:disabled { cursor: not-allowed; }
-
-  .btn-skip {
-    padding: 8px 11px; border-radius: 7px; font-size: 14px;
-    cursor: pointer; background: rgba(255,255,255,0.03);
-    border: 1px solid rgba(255,255,255,0.08); color: var(--brand-muted);
-    transition: all 0.12s;
-  }
-  .btn-skip:hover { color: var(--dark-text); }
-
-  .card-reason {
-    margin-top: 8px; font-size: 12px; color: var(--brand-muted);
-    font-family: var(--mono);
-  }
-
-  /* ── New Folders Alert ── */
-  .new-folders-alert {
-    background: var(--yellow-dim);
-    border: 1px solid rgba(245,158,11,0.22);
-    border-radius: 12px; padding: 15px 20px;
-    margin-bottom: 20px;
-  }
-  .new-folders-title {
-    font-size: 13px; font-weight: 700; color: #fcd34d;
-    margin-bottom: 9px; font-family: var(--mono);
-  }
-  .new-folder-item {
-    font-family: var(--mono); font-size: 12px;
-    color: #d97706; background: rgba(245,158,11,0.1);
-    border-radius: 5px; padding: 4px 11px; margin-bottom: 4px;
-  }
-
-  /* ── Empty / Loading ── */
-  .empty {
-    text-align: center; padding: 70px 20px;
-    color: var(--brand-muted); font-family: var(--mono); font-size: 13px;
-  }
-  .empty-icon { font-size: 40px; margin-bottom: 14px; }
-
-  .loading-spinner {
-    display: inline-block; width: 14px; height: 14px;
-    border: 2px solid rgba(255,255,255,0.2);
-    border-top-color: #fff; border-radius: 50%;
-    animation: spin 0.7s linear infinite;
-  }
-  @keyframes spin { to { transform: rotate(360deg); } }
-
-  /* ── Execute Panel ── */
-  .execute-panel {
-    background: var(--dark-surface);
-    border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 13px; padding: 18px 22px;
-    margin-top: 22px;
-    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
-  }
-  .execute-info {
-    flex: 1; font-size: 13px; color: var(--brand-muted); font-family: var(--mono);
-    min-width: 180px;
-  }
-  .execute-info strong { color: var(--dark-text); }
-
-  .execute-url-input {
-    flex: 1 1 300px;
-    background: rgba(255,255,255,0.05);
-    border: 1px solid rgba(255,255,255,0.12); border-radius: 8px;
-    padding: 10px 14px; color: var(--dark-text);
-    font-family: var(--mono); font-size: 12px; outline: none;
-    transition: border 0.15s;
-  }
-  .execute-url-input:focus { border-color: var(--brand-muted); }
-  .execute-url-input::placeholder { color: var(--brand-muted); }
-
-  /* ── Toast ── */
-  .toast {
-    position: fixed; bottom: 26px; right: 26px;
-    background: var(--dark-surface);
-    border: 1px solid rgba(255,255,255,0.12);
-    border-radius: 11px; padding: 13px 20px;
-    font-size: 14px; color: var(--dark-text);
-    transform: translateY(90px); opacity: 0;
-    transition: all 0.3s; z-index: 999;
-    max-width: 340px; font-family: var(--sans);
-  }
-  .toast.show { transform: translateY(0); opacity: 1; }
-  .toast.success { border-color: rgba(16,185,129,0.4); color: #6ee7b7; }
-  .toast.error   { border-color: rgba(239,68,68,0.4); color: #fca5a5; }
+  .toolbar{display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin:6px 0 4px}
+  .count-note{font-size:12px; color:var(--muted)}
+  details.fails summary{cursor:pointer; font-weight:600; color:var(--bad)}
+  .warnbox{background:#fffbeb; border:1px solid #fde68a; color:#92400e; padding:10px 12px; border-radius:8px; font-size:12.5px; margin-top:12px}
+  .collapsed{display:none}
 </style>
 </head>
 <body>
-<div class="app">
+<div class="wrap">
 
-  <!-- Header -->
-  <header>
-    <div class="logo">
-      <div class="logo-mark">T6</div>
-      <div>
-        <div class="logo-text">TKB 放洋 · 文件預審系統</div>
-        <div class="logo-sub">Module 6 — Vendor Doc Review</div>
-      </div>
-    </div>
-    <div style="display:flex;align-items:center;gap:10px;">
-      <span class="badge">v1.3</span>
-    </div>
+  <header class="top">
+    <h1>廠商資料夾預審與歸檔</h1>
+    <p>廠商把資料夾用「檢視」分享 → 掃描 → 套規則過濾 → AI 命名 → 你審查 → 一段式複製／建捷徑歸檔。</p>
   </header>
 
-  <main>
-
-    <!-- Config Panel -->
-    <div class="config-panel">
-      <div class="config-title">連線設定</div>
-      <div class="config-grid">
-        <div class="field grow">
-          <span class="field-label">GAS WebApp URL</span>
-          <input type="text" id="gasUrl"
-            placeholder="https://script.google.com/macros/s/xxx/exec" />
-        </div>
-        <div class="field sm">
-          <span class="field-label">廠商代號</span>
-          <input type="text" id="vendorCode" placeholder="EP" />
-        </div>
-        <div class="field sm">
-          <span class="field-label">廠商 ID</span>
-          <input type="text" id="vendorId" placeholder="V20260508001" />
-        </div>
-        <div class="field" style="align-self:flex-end;">
-          <button class="btn btn-primary" onclick="loadPending()">
-            <span id="loadBtnInner">載入清單</span>
-          </button>
-        </div>
+  <!-- 設定 -->
+  <section class="card" id="cardConfig">
+    <h2><span class="stepnum">⚙</span> 連線與廠商設定</h2>
+    <div class="grid">
+      <div style="grid-column:1 / -1">
+        <label class="fld">API URL（Apps Script 部署後的 /exec 網址）</label>
+        <input type="url" id="apiUrl" placeholder="https://script.google.com/macros/s/XXXX/exec">
+      </div>
+      <div>
+        <label class="fld">廠商 ID（vendorId）</label>
+        <input type="text" id="vendorId" placeholder="例如 V001">
+      </div>
+      <div>
+        <label class="fld">廠商代號（vendorCode，AI 命名前綴）</label>
+        <input type="text" id="vendorCode" placeholder="例如 EP">
+      </div>
+      <div style="grid-column:1 / -1">
+        <label class="fld">廠商唯讀來源資料夾 URL</label>
+        <input type="url" id="sourceUrl" placeholder="https://drive.google.com/drive/folders/XXXX（廠商分享給你的）">
+      </div>
+      <div style="grid-column:1 / -1">
+        <label class="fld">我方廠商根資料夾 URL（歸檔目的地）</label>
+        <input type="url" id="rootUrl" placeholder="https://drive.google.com/drive/folders/XXXX（你方的廠商資料夾，含 合約文件／學校資料／業務教材…）">
       </div>
     </div>
-
-    <!-- Content -->
-    <div id="content">
-      <div class="empty">
-        <div class="empty-icon">📂</div>
-        <div>填入連線設定後點「載入清單」</div>
-      </div>
+    <div class="row" style="margin-top:12px">
+      <label class="chk"><input type="checkbox" id="remember" checked> 記住設定（存在本機瀏覽器）</label>
     </div>
+    <div class="warnbox">
+      ⚠ 兩個前提：①廠商分享時別關掉「檢視者可下載／複製」，否則文件複製會失敗（那種只能用捷徑）。
+      ②捷徑會在廠商刪檔或收回分享後失效，且未被分享的同事打不開。
+    </div>
+  </section>
 
-  </main>
+  <!-- 1 掃描 -->
+  <section class="card" id="card1">
+    <h2><span class="stepnum">1</span> 掃描來源資料夾</h2>
+    <p class="hint">只抓檔案清單（metadata），不下載內容。檔案多會分批，撞 6 分鐘上限就停下來，按「續掃下一批」即可。</p>
+    <div class="row">
+      <button class="btn" id="btnScan">開始掃描</button>
+      <button class="btn ghost collapsed" id="btnScanMore">續掃下一批</button>
+      <button class="btn gray" id="btnScanProg">查進度</button>
+      <label class="chk"><input type="checkbox" id="autoScan"> 自動連續（關掉分頁就停）</label>
+    </div>
+    <div class="status" id="st1"></div>
+  </section>
+
+  <!-- 2 過濾 -->
+  <section class="card" id="card2">
+    <h2><span class="stepnum">2</span> 套 Need_Profile 過濾</h2>
+    <p class="hint">依規則把每筆標成：真複製（文件、關鍵影音）／捷徑（一般影音、圖片）／排除（截圖、待刪、超大檔、資料夾）。</p>
+    <div class="row">
+      <button class="btn" id="btnFilter">套用過濾</button>
+    </div>
+    <div class="status" id="st2"></div>
+    <div class="pills" id="pills2"></div>
+  </section>
+
+  <!-- 3 AI 命名 -->
+  <section class="card" id="card3">
+    <h2><span class="stepnum">3</span> AI 命名（只跑「真複製」的文件）</h2>
+    <p class="hint">用 Gemini 依檔名＋路徑批次命名分類；筆數多會分批，撞時間就按「再跑一批」。捷徑類不跑 AI、預設用原檔名（待會可在審查時改）。</p>
+    <div class="row">
+      <button class="btn" id="btnAI">AI 命名</button>
+      <button class="btn ghost collapsed" id="btnAIMore">再跑一批</button>
+      <label class="chk"><input type="checkbox" id="autoAI"> 自動連續（關掉分頁就停）</label>
+    </div>
+    <div class="status" id="st3"></div>
+  </section>
+
+  <!-- 4 審查 -->
+  <section class="card" id="card4">
+    <h2><span class="stepnum">4</span> 審查清單（改檔名／改目的夾／動作）</h2>
+    <p class="hint">勾選＝要處理。可改新檔名、改目的資料夾、或切換「複製／捷徑／略過」。未勾選的會標成已排除、不處理。</p>
+    <div class="toolbar">
+      <button class="btn gray" id="btnLoad">載入待審清單</button>
+      <button class="btn" id="btnConfirm" disabled>儲存確認</button>
+      <label class="chk"><input type="checkbox" id="showExcluded"> 一併顯示「已排除」項目（可救回）</label>
+      <span class="count-note" id="reviewCount"></span>
+    </div>
+    <div class="tbl-wrap collapsed" id="tblWrap">
+      <table id="reviewTbl">
+        <thead>
+          <tr>
+            <th style="width:34px"><input type="checkbox" id="chkAll" title="全選"></th>
+            <th style="width:90px">動作</th>
+            <th>原始名稱／路徑</th>
+            <th style="width:230px">新檔名</th>
+            <th style="width:200px">目的資料夾</th>
+            <th style="width:64px">大小</th>
+            <th style="width:60px">信心</th>
+          </tr>
+        </thead>
+        <tbody id="reviewBody"></tbody>
+      </table>
+    </div>
+    <div class="status" id="st4"></div>
+  </section>
+
+  <!-- 5 執行 -->
+  <section class="card" id="card5">
+    <h2><span class="stepnum">5</span> 執行歸檔（複製＋建捷徑）</h2>
+    <p class="hint">把「已確認」的項目實際做掉：文件真複製＋改名到目的夾、素材建捷徑。分批，撞時間按「再執行一批」。重複按不會重做（已處理的會跳過）。</p>
+    <div class="row">
+      <button class="btn" id="btnExec">開始執行</button>
+      <button class="btn ghost collapsed" id="btnExecMore">再執行一批</button>
+      <label class="chk"><input type="checkbox" id="autoExec"> 自動連續（關掉分頁就停）</label>
+    </div>
+    <div class="status" id="st5"></div>
+  </section>
+
+  <!-- 6 報告 -->
+  <section class="card" id="card6">
+    <h2><span class="stepnum">6</span> 處理報告</h2>
+    <p class="hint">各狀態統計與失敗清單。完整紀錄保存在 Vendor_Inventory 工作表（每筆都有狀態、新檔 ID、執行時間、錯誤訊息）。</p>
+    <div class="row">
+      <button class="btn gray" id="btnReport">產生報告</button>
+    </div>
+    <div class="pills" id="pills6"></div>
+    <div id="failsBox"></div>
+    <div class="status" id="st6"></div>
+  </section>
+
 </div>
 
-<!-- Toast -->
-<div class="toast" id="toast"></div>
-
-<script>
-// ── State ──────────────────────────────────────────────
-let items     = [];
-let activeTab = "all";
-
-// ── Helpers ────────────────────────────────────────────
-function getVal(id) { return (document.getElementById(id)?.value || "").trim(); }
-
-function showToast(msg, type = "") {
-  const t = document.getElementById("toast");
-  t.textContent = msg;
-  t.className   = `toast show ${type}`;
-  clearTimeout(t._t);
-  t._t = setTimeout(() => { t.className = "toast"; }, 3200);
-}
-
-function getIcon(name, isFolder) {
-  if (isFolder) return "📁";
-  const ext = (name || "").split(".").pop().toLowerCase();
-  const m = { pdf:"📄",doc:"📝",docx:"📝",xlsx:"📊",xls:"📊",csv:"📊",
-              ppt:"📋",pptx:"📋",jpg:"🖼️",jpeg:"🖼️",png:"🖼️",mp4:"🎬",mov:"🎬",zip:"📦" };
-  return m[ext] || "📄";
-}
-
-// ── API ────────────────────────────────────────────────
-async function callGAS(action, body = {}) {
-  const url = getVal("gasUrl");
-  if (!url) { showToast("請填入 GAS WebApp URL", "error"); throw new Error("no url"); }
-
-  const res = await fetch(url, {
-    method:  "POST",
-    headers: { "Content-Type": "text/plain" },
-    body:    JSON.stringify({ action, ...body }),
-  });
-
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json();
-}
-
-// ── Load ───────────────────────────────────────────────
-async function loadPending() {
-  const btn = document.getElementById("loadBtnInner");
-  const vid = getVal("vendorId") || null;
-
-  btn.innerHTML = '<span class="loading-spinner"></span> 載入中';
-
-  try {
-    const data = await callGAS("doc_getPending", { vendorId: vid });
-    if (!data.success) throw new Error(data.error);
-
-    items = (data.items || []).map(item => ({
-      ...item,
-      overrideDest: item.suggestedDest || "",
-      overrideName: item.suggestedName || item.originalName,
-      confirmed: false,
-      skip: false,
-    }));
-
-    activeTab = "all";
-    renderAll();
-    showToast(`✓ 載入完成，共 ${items.length} 筆`, "success");
-  } catch (e) {
-    showToast("載入失敗：" + e.message, "error");
-    console.error(e);
-  } finally {
-    btn.textContent = "載入清單";
-  }
-}
-
-// ── Render ─────────────────────────────────────────────
-function renderAll() {
-  const content = document.getElementById("content");
-  if (!items.length) {
-    content.innerHTML = `<div class="empty"><div class="empty-icon">✅</div><div>沒有待審查的項目</div></div>`;
-    return;
-  }
-
-  const total     = items.length;
-  const confirmed = items.filter(f => f.confirmed && !f.skip).length;
-  const skipped   = items.filter(f => f.skip).length;
-  const pending   = total - confirmed - skipped;
-
-  const newFolders = [...new Set(
-    items
-      .filter(i => i.isNewFolder && i.overrideDest && !i.overrideDest.includes("略過"))
-      .map(i => i.overrideDest)
-  )];
-
-  const displayed =
-    activeTab === "pending"   ? items.filter(f => !f.confirmed && !f.skip) :
-    activeTab === "confirmed" ? items.filter(f => f.confirmed && !f.skip)  :
-    activeTab === "skip"      ? items.filter(f => f.skip)                  : items;
-
-  content.innerHTML = `
-    ${newFolders.length ? `
-    <div class="new-folders-alert">
-      <div class="new-folders-title">📁 偵測到需新建 ${newFolders.length} 個資料夾</div>
-      ${newFolders.map(f => `<div class="new-folder-item">+ ${f}/</div>`).join("")}
-    </div>` : ""}
-
-    <div class="stats-bar">
-      ${[
-        { label:"待確認", val:pending,   color:"#f59e0b" },
-        { label:"已確認", val:confirmed, color:"#10b981" },
-        { label:"略過",   val:skipped,   color:"#4a6080" },
-        { label:"共計",   val:total,     color:"#8BA4BD" },
-      ].map(s => `
-        <div class="stat">
-          <span class="stat-num" style="color:${s.color}">${s.val}</span>
-          <span class="stat-label">${s.label}</span>
-        </div>`).join("")}
-
-      <div style="margin-left:auto;display:flex;gap:9px;">
-        <button class="btn btn-green" onclick="confirmAll()">✓ 全部確認</button>
-        <button class="btn btn-ghost" onclick="loadPending()">↺ 重新載入</button>
-      </div>
-    </div>
-
-    <div class="tabs">
-      ${[["all","全部"],["pending","待確認"],["confirmed","已確認"],["skip","略過"]].map(([k,l]) =>
-        `<button class="tab ${activeTab===k?"active":""}" onclick="setTab('${k}')">${l}</button>`
-      ).join("")}
-    </div>
-
-    <div class="file-list">
-      ${displayed.map(item => renderCard(item)).join("")}
-    </div>
-
-    <div class="execute-panel">
-      <div class="execute-info">
-        已確認 <strong>${confirmed}</strong> 筆・略過 <strong>${skipped}</strong> 筆・待確認 <strong>${pending}</strong> 筆
-      </div>
-      <input class="execute-url-input" id="execVendorId"
-        placeholder="廠商 ID（如 V20260508001）" style="flex:0 0 180px;" />
-      <input class="execute-url-input" id="vendorFolderUrl"
-        placeholder="廠商根資料夾 Drive URL" />
-      <button class="btn btn-execute" onclick="executeAll()" ${confirmed === 0 ? "disabled" : ""}>
-        🚀 執行歸檔（${confirmed} 筆）
-      </button>
-    </div>
-  `;
-
-  // 自動帶入廠商ID（從上方設定欄）
-  const vidInput = document.getElementById("execVendorId");
-  if (vidInput) {
-    vidInput.value = getVal("vendorId");
-    vidInput.addEventListener("change", () => {
-      // 同步回上方設定欄
-      const top = document.getElementById("vendorId");
-      if (top) top.value = vidInput.value;
-    });
-  }
-
-  // 還原 vendorFolderUrl
-  const saved = localStorage.getItem("tkb_folder_url");
-  if (saved) {
-    const el = document.getElementById("vendorFolderUrl");
-    if (el) el.value = saved;
-  }
-
-  document.getElementById("vendorFolderUrl")?.addEventListener("change", e => {
-    localStorage.setItem("tkb_folder_url", e.target.value);
-  });
-}
-
-function renderCard(item) {
-  const idx      = items.indexOf(item);
-  const icon     = getIcon(item.originalName, item.isFolder);
-  const conf     = item.confidence || "low";
-  const confCls  = { high:"conf-high", medium:"conf-medium", low:"conf-low", skip:"conf-skip" }[conf] || "conf-low";
-  const confLbl  = { high:"高", medium:"中", low:"低", skip:"略過" }[conf] || "?";
-  const isSkip   = (item.overrideDest || "").includes("略過");
-
-  return `
-  <div class="file-card ${item.confirmed?"confirmed":""} ${item.skip?"skipped":""}" id="card-${idx}">
-    <div class="card-row1">
-      <span class="file-icon">${icon}</span>
-      <span class="file-name" title="${escHtml(item.originalPath || '')}">${escHtml(item.originalName || '')}</span>
-      <span class="conf-badge ${confCls}">信心 ${confLbl}</span>
-      ${isSkip ? `<span class="conf-badge conf-skip">略過</span>` : ""}
-    </div>
-    <div class="card-row2">
-      <div class="field-inline">
-        <label>歸入位置</label>
-        <input type="text" value="${escHtml(item.overrideDest || '')}"
-          onchange="updateItem(${idx},'overrideDest',this.value)"
-          ${item.skip ? "disabled" : ""} placeholder="輸入目標路徑" />
-      </div>
-      <div class="field-inline">
-        <label>建議命名</label>
-        <input type="text" class="name-input" value="${escHtml(item.overrideName || '')}"
-          onchange="updateItem(${idx},'overrideName',this.value)"
-          ${item.skip ? "disabled" : ""} placeholder="輸入命名" />
-      </div>
-      <div class="card-actions">
-        <button class="btn-confirm ${item.confirmed?"confirmed":""}"
-          onclick="toggleConfirm(${idx})" ${item.skip?"disabled":""}>
-          ${item.confirmed ? "✓ 確認" : "確認"}
-        </button>
-        <button class="btn-skip" onclick="toggleSkip(${idx})"
-          title="${item.skip ? '取消略過' : '略過'}">
-          ${item.skip ? "↩" : "⏭"}
-        </button>
-      </div>
-    </div>
-    <div class="card-reason">💡 ${escHtml(item.reason || '—')}</div>
-  </div>`;
-}
-
-function escHtml(str) {
-  return String(str)
-    .replace(/&/g,"&amp;").replace(/</g,"&lt;")
-    .replace(/>/g,"&gt;").replace(/"/g,"&quot;");
-}
-
-// ── Actions ────────────────────────────────────────────
-function setTab(tab)               { activeTab = tab; renderAll(); }
-function updateItem(idx, f, v)     { items[idx][f] = v; }
-
-function toggleConfirm(idx) {
-  items[idx].confirmed = !items[idx].confirmed;
-  renderAll();
-}
-
-function toggleSkip(idx) {
-  items[idx].skip      = !items[idx].skip;
-  items[idx].confirmed = false;
-  renderAll();
-}
-
-function confirmAll() {
-  items.forEach(i => { if (!i.skip) i.confirmed = true; });
-  renderAll();
-}
-
-// ── Save & Execute ─────────────────────────────────────
-async function saveConfirmations() {
-  const confirmations = items.map(i => ({
-    rowIndex:      i.rowIndex,
-    confirmedDest: i.overrideDest,
-    confirmedName: i.overrideName,
-    status:        i.skip ? "已略過" : i.confirmed ? "已確認" : "待確認",
-  }));
-
-  const data = await callGAS("doc_confirm", { confirmations });
-  if (!data.success) throw new Error(data.error);
-}
-
-async function executeAll() {
-  // 優先讀執行區的廠商ID，fallback 到頂部設定欄
-  const vid = getVal("execVendorId") || getVal("vendorId");
-  if (!vid) {
-    showToast("請填入廠商 ID", "error");
-    document.getElementById("execVendorId")?.focus();
-    return;
-  }
-
-  const folderUrl = (document.getElementById("vendorFolderUrl")?.value || "").trim();
-  if (!folderUrl) {
-    showToast("請填入廠商根資料夾 Drive URL", "error");
-    document.getElementById("vendorFolderUrl")?.focus();
-    return;
-  }
-
-  showToast("正在儲存確認結果...");
-  try {
-    await saveConfirmations();
-    showToast("⚡ 正在執行搬檔，請稍候...");
-
-    const data = await callGAS("doc_execute", { vendorId: vid, vendorFolderUrl: folderUrl });
-    if (!data.success) throw new Error(data.error);
-
-    showToast(`✅ ${data.message}`, "success");
-    setTimeout(() => loadPending(), 2500);
-  } catch (e) {
-    showToast("執行失敗：" + e.message, "error");
-    console.error(e);
-  }
-}
-
-// ── Persist Config ─────────────────────────────────────
-window.addEventListener("DOMContentLoaded", () => {
-  try {
-    const c = JSON.parse(localStorage.getItem("tkb_config") || "{}");
-    if (c.gasUrl)     document.getElementById("gasUrl").value     = c.gasUrl;
-    if (c.vendorId)   document.getElementById("vendorId").value   = c.vendorId;
-    if (c.vendorCode) document.getElementById("vendorCode").value = c.vendorCode;
-  } catch {}
-
-  ["gasUrl","vendorId","vendorCode"].forEach(id => {
-    document.getElementById(id)?.addEventListener("change", () => {
-      localStorage.setItem("tkb_config", JSON.stringify({
-        gasUrl:     getVal("gasUrl"),
-        vendorId:   getVal("vendorId"),
-        vendorCode: getVal("vendorCode"),
-      }));
-    });
-  });
-});
-</script>
+<script src="app.js"></script>
 </body>
 </html>
