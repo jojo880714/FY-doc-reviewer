@@ -1,419 +1,255 @@
-/* =====================================================================
- * 廠商資料夾預審與歸檔 — 前端邏輯 v2
- * 對應後端：Module 8（掃描）+ Module 9（過濾/AI/執行）+ WebApp_API.gs
- * v2 變更：6 步進度條、一鍵跑到審查、審查清單可排序/搜尋/篩選/批次操作/即時統計、重複偵測
- *
- * 連線方式：fetch POST，body 送 JSON 字串、不加自訂 header（避 CORS 預檢；GAS 端照樣 JSON.parse）
- * 本檔放在自己網站（GitHub Pages），不是 claude.ai artifact，可正常用 localStorage。
- * ===================================================================== */
-"use strict";
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>廠商資料夾預審與歸檔｜TKB 放洋</title>
+<style>
+  :root{
+    --bg:#f5f6f8; --card:#ffffff; --ink:#1f2430; --muted:#6b7280; --line:#e5e7eb;
+    --primary:#2563eb; --primary-d:#1d4ed8; --ok:#15803d; --warn:#b45309; --bad:#b91c1c;
+    --copy-bg:#e6f4ea; --copy-ink:#15803d; --sc-bg:#e8f0fe; --sc-ink:#1d4ed8; --ex-bg:#fce8e6; --ex-ink:#b91c1c;
+    --radius:12px; --shadow:0 1px 2px rgba(16,24,40,.06),0 1px 3px rgba(16,24,40,.1);
+  }
+  *{box-sizing:border-box}
+  body{margin:0; background:var(--bg); color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif;
+    line-height:1.5; font-size:14px;}
+  .wrap{max-width:1120px; margin:0 auto; padding:20px 18px 80px}
+  header.top h1{font-size:20px; margin:0 0 4px}
+  header.top p{margin:0; color:var(--muted); font-size:13px}
 
-const $ = (id) => document.getElementById(id);
-const LS_KEY = "tkb_inv_cfg";
+  /* 進度條 */
+  .stepper{display:flex; gap:6px; margin:16px 0; flex-wrap:wrap}
+  .step{flex:1; min-width:120px; display:flex; align-items:center; gap:8px; padding:8px 10px; border:1px solid var(--line); border-radius:10px; background:#fff; font-size:12.5px; color:var(--muted)}
+  .step .dot{width:22px; height:22px; border-radius:50%; background:#e5e7eb; color:#fff; display:inline-flex; align-items:center; justify-content:center; font-weight:700; font-size:12px; flex:none}
+  .step.active{border-color:var(--primary); color:var(--ink); box-shadow:var(--shadow)}
+  .step.active .dot{background:var(--primary)}
+  .step.done .dot{background:var(--ok)}
+  .step.done{color:var(--ink)}
 
-/* ---------- 設定存取 ---------- */
-function loadCfg() {
-  try {
-    const c = JSON.parse(localStorage.getItem(LS_KEY) || "{}");
-    ["apiUrl","vendorId","vendorCode","sourceUrl","rootUrl"].forEach(k => { if (c[k]) $(k).value = c[k]; });
-  } catch (e) {}
-}
-function saveCfg() {
-  if (!$("remember").checked) return;
-  const c = {};
-  ["apiUrl","vendorId","vendorCode","sourceUrl","rootUrl"].forEach(k => c[k] = $(k).value.trim());
-  localStorage.setItem(LS_KEY, JSON.stringify(c));
-}
-const cfg = {
-  apiUrl:     () => $("apiUrl").value.trim(),
-  vendorId:   () => $("vendorId").value.trim(),
-  vendorCode: () => $("vendorCode").value.trim(),
-  sourceUrl:  () => $("sourceUrl").value.trim(),
-  rootUrl:    () => $("rootUrl").value.trim(),
-};
+  .card{background:var(--card); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow); padding:18px; margin-bottom:16px}
+  .card h2{font-size:15px; margin:0 0 12px; display:flex; align-items:center; gap:8px}
+  .stepnum{display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px; border-radius:50%; background:var(--primary); color:#fff; font-size:12px; font-weight:700; flex:none}
+  .card.done .stepnum{background:var(--ok)}
+  .hint{color:var(--muted); font-size:12.5px; margin:6px 0 12px}
 
-/* ---------- API ---------- */
-async function api(payload) {
-  const url = cfg.apiUrl();
-  if (!url) throw new Error("請先填 API URL");
-  saveCfg();
-  const res = await fetch(url, { method: "POST", body: JSON.stringify(payload), redirect: "follow" });
-  const text = await res.text();
-  try { return JSON.parse(text); }
-  catch (e) { throw new Error("回傳不是 JSON（部署權限或網址有誤）：" + text.slice(0, 200)); }
-}
+  .grid{display:grid; grid-template-columns:repeat(2,1fr); gap:12px}
+  @media(max-width:680px){ .grid{grid-template-columns:1fr} }
+  label.fld{display:block; font-size:12.5px; color:var(--muted); margin-bottom:4px}
+  input[type=text], input[type=url], input[type=search], select{
+    width:100%; padding:8px 10px; border:1px solid var(--line); border-radius:8px; font-size:13px; background:#fff; color:var(--ink);}
+  input:focus, select:focus{outline:2px solid #bfdbfe; border-color:var(--primary)}
 
-/* ---------- 小工具 ---------- */
-const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-const show  = (el) => el && el.classList.remove("collapsed");
-const hide  = (el) => el && el.classList.add("collapsed");
-function setStatus(el, html, cls){ el.innerHTML = cls ? `<span class="${cls}">${html}</span>` : html; }
-function setBusy(el, txt){ el.innerHTML = `<span class="spin"></span>${txt}`; }
-function esc(s){ return String(s==null?"":s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
-function summarize(d){
-  const map = { copied:"複製", shortcut:"捷徑", failed:"失敗", remaining:"剩", processed:"已處理", exclude:"排除", ai_review:"待AI", total:"總計" };
-  const parts = [];
-  Object.keys(map).forEach(k => { if (typeof d[k] === "number") parts.push(map[k] + " " + d[k]); });
-  return parts.length ? parts.join("／") : JSON.stringify(d);
-}
-function isDone(d){
-  if (d.paused === true) return false;
-  if (d.done === true) return true;
-  if (d.done === false) return false;
-  if (typeof d.remaining === "number") return d.remaining === 0;
-  if (typeof d.message === "string" && /完成|已完成|done/i.test(d.message)) return true;
-  return true;
-}
+  .btn{appearance:none; border:1px solid var(--primary); background:var(--primary); color:#fff; padding:8px 14px; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer}
+  .btn:hover{background:var(--primary-d)}
+  .btn:disabled{opacity:.5; cursor:not-allowed}
+  .btn.ghost{background:#fff; color:var(--primary)}
+  .btn.ghost:hover{background:#eff6ff}
+  .btn.gray{background:#fff; color:var(--ink); border-color:var(--line)}
+  .btn.gray:hover{background:#f9fafb}
+  .btn.big{padding:10px 16px; font-size:13.5px}
+  .row{display:flex; flex-wrap:wrap; gap:10px; align-items:center}
+  .chk{display:inline-flex; align-items:center; gap:6px; font-size:12.5px; color:var(--muted)}
 
-/* ---------- 進度條 ---------- */
-function setStep(n, state){ // state: 'active' | 'done' | ''
-  const el = document.querySelector(`.step[data-step="${n}"]`);
-  if (!el) return;
-  el.classList.remove("active","done");
-  if (state) el.classList.add(state);
-}
-function markCardDone(id){ const c = $(id); if (c) c.classList.add("done"); }
+  .status{margin-top:10px; font-size:13px; min-height:20px}
+  .status .ok{color:var(--ok)} .status .warn{color:var(--warn)} .status .bad{color:var(--bad)}
+  .spin{display:inline-block; width:13px; height:13px; border:2px solid #cbd5e1; border-top-color:var(--primary); border-radius:50%; animation:sp .8s linear infinite; vertical-align:-2px; margin-right:6px}
+  @keyframes sp{to{transform:rotate(360deg)}}
 
-/* ---------- 通用分批 pump ---------- */
-async function pump(firstPayload, loopPayload, ctx){
-  loopPayload = loopPayload || firstPayload;
-  const { statusEl, moreBtn, autoEl, label } = ctx;
-  let first = true;
-  setBusy(statusEl, label + "中…");
-  try {
-    while (true) {
-      const d = await api(first ? firstPayload : loopPayload);
-      first = false;
-      if (!d || d.success === false) { setStatus(statusEl, "✗ " + ((d && d.error) || "失敗"), "bad"); if (moreBtn) show(moreBtn); return d; }
-      const done = isDone(d);
-      setStatus(statusEl, (done ? "✓ " : "⏸ ") + (d.message || summarize(d)), done ? "ok" : "warn");
-      if (ctx.onEachDone) ctx.onEachDone(d);
-      if (done) { if (moreBtn) hide(moreBtn); return d; }
-      if (autoEl && autoEl.checked) { await sleep(900); continue; }
-      if (moreBtn) show(moreBtn);
-      return d;
-    }
-  } catch (e) { setStatus(statusEl, "✗ " + e.message, "bad"); if (moreBtn) show(moreBtn); }
-}
+  .pills{display:flex; flex-wrap:wrap; gap:8px; margin-top:10px}
+  .pill{font-size:12px; padding:4px 10px; border-radius:999px; background:#f1f3f4; color:var(--ink)}
+  .pill.copy{background:var(--copy-bg); color:var(--copy-ink)}
+  .pill.sc{background:var(--sc-bg); color:var(--sc-ink)}
+  .pill.ex{background:var(--ex-bg); color:var(--ex-ink)}
 
-function requireBasics(){
-  if (!cfg.apiUrl())   { alert("請先填 API URL"); return false; }
-  if (!cfg.vendorId()) { alert("請先填廠商 ID"); return false; }
-  return true;
-}
+  table{width:100%; border-collapse:collapse; font-size:12.5px; margin-top:8px}
+  th,td{text-align:left; padding:7px 8px; border-bottom:1px solid var(--line); vertical-align:top}
+  th{color:var(--muted); font-weight:600; position:sticky; top:0; background:#fafafa; z-index:1; white-space:nowrap}
+  th.sortable{cursor:pointer; user-select:none}
+  th.sortable:hover{color:var(--primary)}
+  th .arr{opacity:.4; font-size:10px}
+  th.sorted .arr{opacity:1; color:var(--primary)}
+  .tbl-wrap{max-height:520px; overflow:auto; border:1px solid var(--line); border-radius:8px}
+  td input[type=text], td select{padding:5px 7px; font-size:12px}
+  .tag{font-size:11px; padding:2px 7px; border-radius:6px; white-space:nowrap}
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:11.5px; color:var(--muted); word-break:break-all}
+  .src{color:var(--muted); font-size:11px; word-break:break-all}
+  .conf-low{color:var(--bad); font-weight:600}
+  .conf-medium{color:var(--warn)}
+  .conf-high{color:var(--ok)}
 
-/* ===================================================================
- * 一鍵：過濾 → 命名 → 載入審查
- * =================================================================== */
-$("btnAuto").addEventListener("click", async () => {
-  if (!requireBasics()) return;
-  if (!cfg.vendorCode()) { alert("AI 命名需要廠商代號（vendorCode）"); return; }
-  const btn = $("btnAuto"); btn.disabled = true;
-  try {
-    // 2 過濾
-    setStep(2, "active"); setBusy($("stAuto"), "① 過濾中…");
-    const f = await api({ action: "inv_filter", vendorId: cfg.vendorId() });
-    if (f.success === false) { setStatus($("stAuto"), "✗ 過濾失敗：" + f.error, "bad"); return; }
-    showFilterPills(f); markCardDone("card2"); setStep(2, "done");
+  .toolbar{display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:6px 0}
+  .toolbar .grow{flex:1; min-width:160px}
+  .count-note{font-size:12px; color:var(--muted)}
+  .summary{font-size:12.5px; margin:8px 0; padding:8px 12px; background:#f8fafc; border:1px solid var(--line); border-radius:8px}
+  .summary b{color:var(--ink)}
+  details.fails summary{cursor:pointer; font-weight:600; color:var(--bad)}
+  .warnbox{background:#fffbeb; border:1px solid #fde68a; color:#92400e; padding:10px 12px; border-radius:8px; font-size:12.5px; margin-top:12px}
+  .dupewarn{background:#fef2f2; border:1px solid #fecaca; color:#991b1b; padding:8px 12px; border-radius:8px; font-size:12.5px; margin:8px 0; display:none}
+  .collapsed{display:none}
+</style>
+</head>
+<body>
+<div class="wrap">
 
-    // 3 AI 命名（自動連續到完成）
-    setStep(3, "active");
-    while (true) {
-      setBusy($("stAuto"), "② AI 命名中…（自動連續）");
-      const a = await api({ action: "inv_analyze", vendorId: cfg.vendorId(), vendorCode: cfg.vendorCode() });
-      if (a.success === false) { setStatus($("stAuto"), "✗ AI 命名失敗：" + a.error, "bad"); return; }
-      setStatus($("st3"), (isDone(a)?"✓ ":"⏸ ") + (a.message || summarize(a)), isDone(a)?"ok":"warn");
-      if (isDone(a)) break;
-      await sleep(900);
-    }
-    markCardDone("card3"); setStep(3, "done");
+  <header class="top">
+    <h1>廠商資料夾預審與歸檔</h1>
+    <p>共 6 步：掃描 → 過濾 → AI 命名 → 你審查 → 執行 → 報告。中間第 2~3 步可用「自動跑到審查」一鍵帶過。</p>
+  </header>
 
-    // 4 載入審查
-    setBusy($("stAuto"), "③ 載入審查清單…");
-    await loadReview();
-    setStatus($("stAuto"), "✓ 已跑到審查。請在下方第 4 步檢查、勾選、儲存確認。", "ok");
-    $("card4").scrollIntoView({ behavior: "smooth", block: "start" });
-  } catch (e) { setStatus($("stAuto"), "✗ " + e.message, "bad"); }
-  finally { btn.disabled = false; }
-});
+  <!-- 進度條 -->
+  <div class="stepper" id="stepper">
+    <div class="step" data-step="1"><span class="dot">1</span>掃描</div>
+    <div class="step" data-step="2"><span class="dot">2</span>過濾</div>
+    <div class="step" data-step="3"><span class="dot">3</span>AI 命名</div>
+    <div class="step" data-step="4"><span class="dot">4</span>審查</div>
+    <div class="step" data-step="5"><span class="dot">5</span>執行</div>
+    <div class="step" data-step="6"><span class="dot">6</span>報告</div>
+  </div>
 
-/* ===================================================================
- * 步驟 1：掃描
- * =================================================================== */
-$("btnScan").addEventListener("click", () => {
-  if (!requireBasics()) return;
-  if (!cfg.sourceUrl()) { alert("請先填廠商唯讀來源資料夾 URL"); return; }
-  setStep(1, "active");
-  pump(
-    { action: "inv_startScan", vendorId: cfg.vendorId(), vendorCode: cfg.vendorCode(), sourceFolderUrl: cfg.sourceUrl() },
-    { action: "inv_scanBatch", vendorId: cfg.vendorId() },
-    { statusEl: $("st1"), moreBtn: $("btnScanMore"), autoEl: $("autoScan"), label: "掃描",
-      onEachDone: (d) => { if (isDone(d)) { markCardDone("card1"); setStep(1, "done"); } } }
-  );
-});
-$("btnScanMore").addEventListener("click", () => {
-  pump({ action: "inv_scanBatch", vendorId: cfg.vendorId() }, null,
-    { statusEl: $("st1"), moreBtn: $("btnScanMore"), autoEl: $("autoScan"), label: "掃描",
-      onEachDone: (d) => { if (isDone(d)) { markCardDone("card1"); setStep(1, "done"); } } });
-});
-$("btnScanProg").addEventListener("click", async () => {
-  setBusy($("st1"), "查詢中…");
-  try { const d = await api({ action: "inv_scanProgress", vendorId: cfg.vendorId() });
-    setStatus($("st1"), (d.message || summarize(d)), d.success === false ? "bad" : ""); }
-  catch (e) { setStatus($("st1"), "✗ " + e.message, "bad"); }
-});
+  <!-- 設定 -->
+  <section class="card" id="cardConfig">
+    <h2><span class="stepnum">⚙</span> 連線與廠商設定</h2>
+    <div class="grid">
+      <div style="grid-column:1 / -1">
+        <label class="fld">API URL（Apps Script 部署後的 /exec 網址）</label>
+        <input type="url" id="apiUrl" placeholder="https://script.google.com/macros/s/XXXX/exec">
+      </div>
+      <div>
+        <label class="fld">廠商 ID（vendorId）</label>
+        <input type="text" id="vendorId" placeholder="例如 V20260513002">
+      </div>
+      <div>
+        <label class="fld">廠商代號（vendorCode，AI 命名前綴）</label>
+        <input type="text" id="vendorCode" placeholder="例如 CG">
+      </div>
+      <div style="grid-column:1 / -1">
+        <label class="fld">廠商唯讀來源資料夾 URL</label>
+        <input type="url" id="sourceUrl" placeholder="https://drive.google.com/drive/folders/XXXX（廠商分享給你的）">
+      </div>
+      <div style="grid-column:1 / -1">
+        <label class="fld">我方廠商根資料夾 URL（歸檔目的地）</label>
+        <input type="url" id="rootUrl" placeholder="https://drive.google.com/drive/folders/XXXX（你方的廠商資料夾）">
+      </div>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <label class="chk"><input type="checkbox" id="remember" checked> 記住設定（存在本機瀏覽器）</label>
+      <button class="btn big" id="btnAuto" style="margin-left:auto">自動：過濾 → 命名 → 載入審查</button>
+    </div>
+    <div class="status" id="stAuto"></div>
+    <div class="warnbox">
+      ⚠ ①廠商分享時別關掉「檢視者可下載／複製」，否則文件複製會失敗（那種只能用捷徑）。
+      ②同一廠商<strong>重掃前先清空</strong>舊資料（編輯器跑 resetVendorInventory），不要重複按「開始掃描」往上疊、造成重複列。
+      ③捷徑會在廠商刪檔或收回分享後失效。
+    </div>
+  </section>
 
-/* ===================================================================
- * 步驟 2：過濾
- * =================================================================== */
-function showFilterPills(d){
-  $("pills2").innerHTML =
-    `<span class="pill copy">真複製（含關鍵影音） 待AI ${d.ai_review ?? 0}</span>` +
-    `<span class="pill sc">捷徑（影音／圖片） ${d.shortcut ?? 0}</span>` +
-    `<span class="pill ex">排除 ${d.exclude ?? 0}</span>` +
-    `<span class="pill">總處理 ${d.total ?? 0}</span>`;
-}
-$("btnFilter").addEventListener("click", async () => {
-  if (!requireBasics()) return;
-  setStep(2, "active"); setBusy($("st2"), "過濾中…"); $("pills2").innerHTML = "";
-  try {
-    const d = await api({ action: "inv_filter", vendorId: cfg.vendorId() });
-    if (d.success === false) { setStatus($("st2"), "✗ " + d.error, "bad"); return; }
-    setStatus($("st2"), "✓ " + (d.message || "過濾完成"), "ok");
-    showFilterPills(d); markCardDone("card2"); setStep(2, "done");
-  } catch (e) { setStatus($("st2"), "✗ " + e.message, "bad"); }
-});
+  <!-- 1 掃描 -->
+  <section class="card" id="card1">
+    <h2><span class="stepnum">1</span> 掃描來源資料夾</h2>
+    <p class="hint">只抓檔案清單（metadata），不下載內容。檔案多會分批，撞 6 分鐘上限就停，按「續掃下一批」或勾「自動連續」。</p>
+    <div class="row">
+      <button class="btn" id="btnScan">開始掃描</button>
+      <button class="btn ghost collapsed" id="btnScanMore">續掃下一批</button>
+      <button class="btn gray" id="btnScanProg">查進度</button>
+      <label class="chk"><input type="checkbox" id="autoScan"> 自動連續（關掉分頁就停）</label>
+    </div>
+    <div class="status" id="st1"></div>
+  </section>
 
-/* ===================================================================
- * 步驟 3：AI 命名
- * =================================================================== */
-function runAI(){
-  if (!requireBasics()) return;
-  if (!cfg.vendorCode()) { alert("AI 命名需要廠商代號（vendorCode）"); return; }
-  setStep(3, "active");
-  const p = { action: "inv_analyze", vendorId: cfg.vendorId(), vendorCode: cfg.vendorCode() };
-  pump(p, p, { statusEl: $("st3"), moreBtn: $("btnAIMore"), autoEl: $("autoAI"), label: "AI 命名",
-    onEachDone: (d) => { if (isDone(d)) { markCardDone("card3"); setStep(3, "done"); } } });
-}
-$("btnAI").addEventListener("click", runAI);
-$("btnAIMore").addEventListener("click", runAI);
+  <!-- 2 過濾 -->
+  <section class="card" id="card2">
+    <h2><span class="stepnum">2</span> 套 Need_Profile 過濾</h2>
+    <p class="hint">依規則把每筆標成：真複製（文件、關鍵影音）／捷徑（一般影音、圖片）／排除（截圖、待刪、超大檔、資料夾）。秒過。</p>
+    <div class="row"><button class="btn" id="btnFilter">套用過濾</button></div>
+    <div class="status" id="st2"></div>
+    <div class="pills" id="pills2"></div>
+  </section>
 
-/* ===================================================================
- * 步驟 4：審查清單（資料驅動：reviewItems 為真實來源，DOM 只反映）
- * =================================================================== */
-const ACTION_LABEL = { ai_review: "複製", shortcut: "捷徑", exclude: "略過" };
-const CONF_RANK = { high: 3, medium: 2, low: 1, "": 0 };
-let reviewItems = [];          // 每筆含 _checked / _action / _name / _dest
-let sortKey = "conf", sortDir = "asc";
+  <!-- 3 AI 命名 -->
+  <section class="card" id="card3">
+    <h2><span class="stepnum">3</span> AI 命名（只跑「真複製」的文件）</h2>
+    <p class="hint">用 Gemini 依檔名＋路徑批次命名分類。每批 40 筆、各約數十秒；撞時間按「再跑一批」或勾自動連續。捷徑類不跑 AI。</p>
+    <div class="row">
+      <button class="btn" id="btnAI">AI 命名</button>
+      <button class="btn ghost collapsed" id="btnAIMore">再跑一批</button>
+      <label class="chk"><input type="checkbox" id="autoAI"> 自動連續（關掉分頁就停）</label>
+    </div>
+    <div class="status" id="st3"></div>
+  </section>
 
-function actionSelectHtml(current){
-  return ["ai_review","shortcut","exclude"].map(x =>
-    `<option value="${x}"${x===current?" selected":""}>${ACTION_LABEL[x]}</option>`).join("");
-}
-function confHtml(c){
-  if (!c) return "";
-  const cls = c==="high" ? "conf-high" : (c==="medium" ? "conf-medium" : "conf-low");
-  return `<span class="${cls}">${esc(c)}</span>`;
-}
+  <!-- 4 審查 -->
+  <section class="card" id="card4">
+    <h2><span class="stepnum">4</span> 審查清單（改檔名／改目的夾／動作）</h2>
+    <p class="hint">勾選＝要處理。可改新檔名、改目的資料夾、或切「複製／捷徑／略過」。未勾選的會標成已排除、不處理。</p>
 
-function visibleItems(){
-  const kw = $("searchBox").value.trim().toLowerCase();
-  const fa = $("filterAction").value;
-  let list = reviewItems.filter(it => {
-    if (fa && it._action !== fa) return false;
-    if (kw) {
-      const hay = (String(it.originalName) + " " + String(it.originalPath)).toLowerCase();
-      if (hay.indexOf(kw) === -1) return false;
-    }
-    return true;
-  });
-  const dir = sortDir === "asc" ? 1 : -1;
-  list.sort((a, b) => {
-    let va, vb;
-    switch (sortKey) {
-      case "size": va = a.sizeBytes||0; vb = b.sizeBytes||0; break;
-      case "conf": va = CONF_RANK[a.confidence]||0; vb = CONF_RANK[b.confidence]||0; break;
-      case "action": va = a._action||""; vb = b._action||""; break;
-      case "dest": va = (a._dest||"").toLowerCase(); vb = (b._dest||"").toLowerCase(); break;
-      default: va = (a.originalName||"").toLowerCase(); vb = (b.originalName||"").toLowerCase();
-    }
-    if (va < vb) return -1*dir; if (va > vb) return 1*dir; return 0;
-  });
-  return list;
-}
+    <div class="toolbar">
+      <button class="btn gray" id="btnLoad">載入待審清單</button>
+      <button class="btn" id="btnConfirm" disabled>儲存確認</button>
+      <input type="search" id="searchBox" class="grow" placeholder="搜尋檔名／路徑…">
+      <select id="filterAction">
+        <option value="">全部動作</option>
+        <option value="ai_review">只看 複製</option>
+        <option value="shortcut">只看 捷徑</option>
+        <option value="exclude">只看 略過</option>
+      </select>
+      <label class="chk"><input type="checkbox" id="showExcluded"> 含「已排除」（可救回）</label>
+    </div>
 
-function renderTable(){
-  const list = visibleItems();
-  const body = $("reviewBody");
-  body.innerHTML = list.map(it =>
-    `<tr data-row="${it.rowIndex}">` +
-      `<td><input type="checkbox" class="rchk"${it._checked?" checked":""}></td>` +
-      `<td><select class="ract">${actionSelectHtml(it._action)}</select></td>` +
-      `<td><div>${esc(it.originalName)}</div><div class="src">${esc(it.originalPath)}</div>` +
-        (it.aiReason ? `<div class="src" title="${esc(it.aiReason)}">🤖 ${esc(it.aiReason).slice(0,60)}</div>` : "") +
-        `<div class="src">規則 ${esc(it.matchedRule)}</div></td>` +
-      `<td><input type="text" class="rname" value="${esc(it._name)}"></td>` +
-      `<td><input type="text" class="rdest" value="${esc(it._dest)}"></td>` +
-      `<td>${esc(it.sizeText)}</td>` +
-      `<td>${confHtml(it.confidence)}</td>` +
-    `</tr>`).join("");
-  // 排序箭頭
-  document.querySelectorAll("th.sortable").forEach(th => {
-    th.classList.remove("sorted");
-    const a = th.querySelector(".arr"); if (a) a.textContent = "↕";
-    if (th.dataset.sort === sortKey) { th.classList.add("sorted"); if (a) a.textContent = sortDir==="asc"?"↑":"↓"; }
-  });
-  $("count-shown") && ($("count-shown").textContent = list.length);
-  updateSummary();
-}
+    <div class="toolbar">
+      <button class="btn gray" id="bulkAll">全選</button>
+      <button class="btn gray" id="bulkNone">全不選</button>
+      <button class="btn gray" id="bulkUncheckLow">取消所有 low 信心</button>
+      <button class="btn gray" id="bulkCopy">勾選的全設複製</button>
+      <button class="btn gray" id="bulkShortcut">勾選的全設捷徑</button>
+    </div>
 
-function updateSummary(){
-  let copy=0, sc=0, skip=0;
-  reviewItems.forEach(it => {
-    if (!it._checked || it._action === "exclude") skip++;
-    else if (it._action === "shortcut") sc++;
-    else copy++;
-  });
-  const total = reviewItems.length;
-  show($("reviewSummary"));
-  $("reviewSummary").innerHTML =
-    `清單共 <b>${total}</b> 筆（顯示 ${visibleItems().length}）　→　將處理：複製 <b>${copy}</b>、捷徑 <b>${sc}</b>；略過 <b>${skip}</b>`;
-  $("btnConfirm").disabled = total === 0;
-}
+    <div class="dupewarn" id="dupeWarn"></div>
+    <div class="summary collapsed" id="reviewSummary"></div>
 
-function detectDupes(){
-  const byName = {};
-  reviewItems.forEach(it => { const k = it.originalName; byName[k] = (byName[k]||0)+1; });
-  const dup = Object.keys(byName).filter(k => byName[k] > 1);
-  const box = $("dupeWarn");
-  if (dup.length) {
-    box.style.display = "block";
-    box.innerHTML = `⚠ 偵測到 ${dup.length} 個檔名重複出現（可能掃描了多次）。建議先在 GAS 編輯器執行 ` +
-      `<code>dedupeVendorInventory("${esc(cfg.vendorId())}")</code> 清掉重複列，再重新載入。`;
-  } else { box.style.display = "none"; box.innerHTML = ""; }
-}
+    <div class="tbl-wrap collapsed" id="tblWrap">
+      <table id="reviewTbl">
+        <thead>
+          <tr>
+            <th style="width:34px"><input type="checkbox" id="chkAll" title="全選"></th>
+            <th style="width:96px" class="sortable" data-sort="action">動作 <span class="arr">↕</span></th>
+            <th class="sortable" data-sort="name">原始名稱／路徑 <span class="arr">↕</span></th>
+            <th style="width:240px">新檔名</th>
+            <th style="width:210px" class="sortable" data-sort="dest">目的資料夾 <span class="arr">↕</span></th>
+            <th style="width:70px" class="sortable" data-sort="size">大小 <span class="arr">↕</span></th>
+            <th style="width:66px" class="sortable" data-sort="conf">信心 <span class="arr">↕</span></th>
+          </tr>
+        </thead>
+        <tbody id="reviewBody"></tbody>
+      </table>
+    </div>
+    <div class="status" id="st4"></div>
+  </section>
 
-async function loadReview(){
-  if (!requireBasics()) return;
-  setStep(4, "active"); setBusy($("st4"), "載入中…");
-  try {
-    const d = await api({ action: "inv_getList", vendorId: cfg.vendorId(), status: "待確認" });
-    if (d.success === false) { setStatus($("st4"), "✗ " + d.error, "bad"); return; }
-    let items = d.items || [];
-    if ($("showExcluded").checked) {
-      const d2 = await api({ action: "inv_getList", vendorId: cfg.vendorId(), status: "已排除" });
-      if (d2.items) items = items.concat(d2.items);
-    }
-    // 套上編輯狀態
-    reviewItems = items.map(it => ({
-      ...it,
-      _checked: it.status !== "已排除",
-      _action:  it.status === "已排除" ? "exclude" : (it.filterResult || "ai_review"),
-      _name:    it.confirmedName || it.suggestedName || it.originalName || "",
-      _dest:    it.confirmedDest || it.suggestedDest || "",
-    }));
-    show($("tblWrap"));
-    renderTable();
-    detectDupes();
-    setStatus($("st4"), reviewItems.length ? "" : "目前沒有待審項目（先跑過濾／AI 命名）", reviewItems.length ? "" : "warn");
-  } catch (e) { setStatus($("st4"), "✗ " + e.message, "bad"); }
-}
-$("btnLoad").addEventListener("click", loadReview);
-$("showExcluded").addEventListener("change", () => { if (!$("tblWrap").classList.contains("collapsed")) loadReview(); });
+  <!-- 5 執行 -->
+  <section class="card" id="card5">
+    <h2><span class="stepnum">5</span> 執行歸檔（複製＋建捷徑）</h2>
+    <p class="hint">把「已確認」的項目實際做掉：文件真複製＋改名到目的夾、素材建捷徑。分批，撞時間按「再執行一批」。重複按不會重做。</p>
+    <div class="row">
+      <button class="btn" id="btnExec">開始執行</button>
+      <button class="btn ghost collapsed" id="btnExecMore">再執行一批</button>
+      <label class="chk"><input type="checkbox" id="autoExec"> 自動連續（關掉分頁就停）</label>
+    </div>
+    <div class="status" id="st5"></div>
+  </section>
 
-/* DOM 編輯 → 同步回 reviewItems（用事件委派） */
-function findItem(rowIndex){ return reviewItems.find(it => String(it.rowIndex) === String(rowIndex)); }
-$("reviewBody").addEventListener("change", (e) => {
-  const tr = e.target.closest("tr"); if (!tr) return;
-  const it = findItem(tr.dataset.row); if (!it) return;
-  if (e.target.classList.contains("rchk"))  it._checked = e.target.checked;
-  if (e.target.classList.contains("ract"))  it._action  = e.target.value;
-  if (e.target.classList.contains("rname")) it._name    = e.target.value;
-  if (e.target.classList.contains("rdest")) it._dest    = e.target.value;
-  updateSummary();
-});
+  <!-- 6 報告 -->
+  <section class="card" id="card6">
+    <h2><span class="stepnum">6</span> 處理報告</h2>
+    <p class="hint">各狀態統計與失敗清單。完整紀錄保存在 Vendor_Inventory 工作表。</p>
+    <div class="row"><button class="btn gray" id="btnReport">產生報告</button></div>
+    <div class="pills" id="pills6"></div>
+    <div id="failsBox"></div>
+    <div class="status" id="st6"></div>
+  </section>
 
-/* 排序表頭 */
-document.querySelectorAll("th.sortable").forEach(th => th.addEventListener("click", () => {
-  const k = th.dataset.sort;
-  if (sortKey === k) sortDir = (sortDir === "asc" ? "desc" : "asc");
-  else { sortKey = k; sortDir = "asc"; }
-  renderTable();
-}));
-/* 搜尋 / 篩選 */
-$("searchBox").addEventListener("input", renderTable);
-$("filterAction").addEventListener("change", renderTable);
-/* 全選框 */
-$("chkAll").addEventListener("change", (e) => { reviewItems.forEach(it => it._checked = e.target.checked); renderTable(); });
-/* 批次 */
-$("bulkAll").addEventListener("click", () => { reviewItems.forEach(it => it._checked = true); renderTable(); });
-$("bulkNone").addEventListener("click", () => { reviewItems.forEach(it => it._checked = false); renderTable(); });
-$("bulkUncheckLow").addEventListener("click", () => { reviewItems.forEach(it => { if (it.confidence === "low") it._checked = false; }); renderTable(); });
-$("bulkCopy").addEventListener("click", () => { reviewItems.forEach(it => { if (it._checked) it._action = "ai_review"; }); renderTable(); });
-$("bulkShortcut").addEventListener("click", () => { reviewItems.forEach(it => { if (it._checked) it._action = "shortcut"; }); renderTable(); });
-
-/* 儲存確認 */
-$("btnConfirm").addEventListener("click", async () => {
-  if (!reviewItems.length) { alert("沒有可確認的項目"); return; }
-  const confirmations = reviewItems.map(it => {
-    let status, filterResult;
-    if (!it._checked || it._action === "exclude") { status = "已排除"; filterResult = "exclude"; }
-    else { status = "已確認"; filterResult = it._action; }
-    return { rowIndex: it.rowIndex, confirmedName: it._name.trim(), confirmedDest: it._dest.trim(), filterResult, status };
-  });
-  setBusy($("st4"), "儲存中…");
-  try {
-    const d = await api({ action: "inv_confirm", confirmations });
-    if (d.success === false) { setStatus($("st4"), "✗ " + d.error, "bad"); return; }
-    const keep = confirmations.filter(c => c.status === "已確認").length;
-    setStatus($("st4"), `✓ 已儲存 ${confirmations.length} 筆，其中 ${keep} 筆待執行`, "ok");
-    markCardDone("card4"); setStep(4, "done");
-  } catch (e) { setStatus($("st4"), "✗ " + e.message, "bad"); }
-});
-
-/* ===================================================================
- * 步驟 5：執行
- * =================================================================== */
-function runExec(){
-  if (!requireBasics()) return;
-  if (!cfg.rootUrl()) { alert("請先填我方廠商根資料夾 URL"); return; }
-  setStep(5, "active");
-  const p = { action: "inv_execute", vendorId: cfg.vendorId(), ourVendorRootUrl: cfg.rootUrl() };
-  pump(p, p, { statusEl: $("st5"), moreBtn: $("btnExecMore"), autoEl: $("autoExec"), label: "執行",
-    onEachDone: (d) => { if (isDone(d)) { markCardDone("card5"); setStep(5, "done"); } } });
-}
-$("btnExec").addEventListener("click", runExec);
-$("btnExecMore").addEventListener("click", runExec);
-
-/* ===================================================================
- * 步驟 6：報告
- * =================================================================== */
-const STATUS_PILL = { "已複製":"copy", "已建捷徑":"sc", "已排除":"ex", "失敗":"ex" };
-$("btnReport").addEventListener("click", async () => {
-  if (!requireBasics()) return;
-  setStep(6, "active"); setBusy($("st6"), "統計中…"); $("pills6").innerHTML = ""; $("failsBox").innerHTML = "";
-  try {
-    const d = await api({ action: "inv_summary", vendorId: cfg.vendorId() });
-    if (d.success === false) { setStatus($("st6"), "✗ " + d.error, "bad"); return; }
-    const counts = d.counts || {};
-    const order = ["已複製","已建捷徑","已排除","失敗","已確認","待確認","待AI","待過濾"];
-    const keys = order.filter(k => counts[k]).concat(Object.keys(counts).filter(k => order.indexOf(k) === -1));
-    $("pills6").innerHTML = keys.map(k => `<span class="pill ${STATUS_PILL[k]||""}">${esc(k)} ${counts[k]}</span>`).join("") +
-      `<span class="pill">總計 ${d.total||0}</span>`;
-    setStatus($("st6"), "✓ 報告完成（完整紀錄在 Vendor_Inventory 工作表）", "ok");
-    markCardDone("card6"); setStep(6, "done");
-
-    const fails = d.failures || [];
-    if (fails.length) {
-      let html = `<details class="fails" open><summary>失敗清單（${fails.length}）</summary>` +
-        `<div class="tbl-wrap" style="max-height:280px;margin-top:8px"><table><thead><tr><th>名稱</th><th>目的夾</th><th>錯誤</th></tr></thead><tbody>`;
-      fails.forEach(f => { html += `<tr><td>${esc(f.name)}<div class="src">${esc(f.path)}</div></td><td>${esc(f.dest)}</td><td class="bad">${esc(f.error)}</td></tr>`; });
-      html += `</tbody></table></div></details>`;
-      $("failsBox").innerHTML = html;
-    }
-  } catch (e) { setStatus($("st6"), "✗ " + e.message, "bad"); }
-});
-
-/* ---------- 初始化 ---------- */
-loadCfg();
-["apiUrl","vendorId","vendorCode","sourceUrl","rootUrl"].forEach(id => $(id).addEventListener("change", saveCfg));
+</div>
+<script src="app.js"></script>
+</body>
+</html>
