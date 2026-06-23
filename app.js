@@ -417,3 +417,30 @@ $("btnReport").addEventListener("click", async () => {
 /* ---------- 初始化 ---------- */
 loadCfg();
 ["apiUrl","vendorId","vendorCode","sourceUrl","rootUrl"].forEach(id => $(id).addEventListener("change", saveCfg));
+
+/* ---------- embed bootstrap：由廠商系統 iframe 帶入設定（Route A） ----------
+ * 只在 ?embed=1 時啟動，獨立使用完全不受影響。
+ * 接在 loadCfg() 之後執行 → query 參數會覆蓋 localStorage 載入的舊值，
+ * 並透過 dispatch change 觸發既有 saveCfg（記住設定）。
+ * srcFolder 不一定帶（PM 在畫面手動貼 sourceUrl）。
+ */
+(function () {
+  const q = new URLSearchParams(location.search);
+  if (q.get("embed") !== "1") return;
+  document.documentElement.classList.add("embed");
+  const MAP = {
+    apiUrl:     "apiUrl",      // API URL
+    vendorId:   "vendorId",    // 廠商 ID
+    vendorCode: "vendorCode",  // 廠商代號（AI 命名前綴）
+    srcFolder:  "sourceUrl",   // 廠商唯讀來源資料夾
+    dstFolder:  "rootUrl",     // 我方廠商根資料夾（歸檔目的地）
+  };
+  Object.entries(MAP).forEach(([param, id]) => {
+    const v = q.get(param);
+    const el = document.getElementById(id);
+    if (!el || v == null || v === "") return;
+    el.value = v;
+    el.dispatchEvent(new Event("input",  { bubbles: true }));
+    el.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+})();
