@@ -5,6 +5,12 @@
  *
  * 連線方式：fetch POST，body 送 JSON 字串、不加自訂 header（避 CORS 預檢；GAS 端照樣 JSON.parse）
  * 本檔放在自己網站（GitHub Pages），不是 claude.ai artifact，可正常用 localStorage。
+ *
+ * === 修改說明 (2026-06-23) ===
+ * [embed bootstrap]（檔尾）?embed=1 時由父層（廠商系統 iframe）用 query 帶入設定
+ *   apiUrl/vendorId/vendorCode/sourceUrl/rootUrl，接在 loadCfg() 之後覆蓋 localStorage 舊值。
+ * [sourceUrl 防殘留] embed 模式且 query 未帶 srcFolder 時，主動清空 sourceUrl，
+ *   避免跨廠商污染（殘留上一家來源夾）。獨立使用（無 ?embed）完全不受影響。
  * ===================================================================== */
 "use strict";
 
@@ -443,4 +449,15 @@ loadCfg();
     el.dispatchEvent(new Event("input",  { bubbles: true }));
     el.dispatchEvent(new Event("change", { bubbles: true }));
   });
+  // embed 模式下 srcFolder 不由父層帶入（PM 每家手填）。
+  // query 沒帶 srcFolder → 主動清空 sourceUrl，避免殘留上一家廠商的來源夾。
+  // 用 q.has() 存在性判斷：future-proof —— 未來父層若開始帶 srcFolder，會走 MAP 填入、自動跳過清空。
+  if (!q.has("srcFolder")) {
+    const el = document.getElementById("sourceUrl");
+    if (el) {
+      el.value = "";
+      el.dispatchEvent(new Event("input",  { bubbles: true }));
+      el.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+  }
 })();
